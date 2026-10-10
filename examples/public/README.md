@@ -10,7 +10,7 @@
 
 **许可：** [Creative Commons Attribution 4.0 International（CC BY 4.0）](https://creativecommons.org/licenses/by/4.0/)。以上数据许可适用于此处转载的公开数据，不代表整个软件仓库已采用同一许可证。使用数据时应保留原作者、数据集及关联出版物署名。
 
-三份 XLSX 未改变单元格、工作表、顺序、格式或文件字节；2026-10-10 与 Zenodo API 提供的 MD5 逐一核对一致。校验信息及 SHA-256 见 [source.json](zenodo_18845748/source.json)，作者原说明见 [ORIGINAL_README.md](zenodo_18845748/ORIGINAL_README.md)（由原 `Readme.md` 原字节复制，仅改文件名）。原数据包含原始谱和处理结果，教程明确选取下表中的原谱工作表。
+三份 XLSX 未改变单元格、工作表、顺序、格式或文件字节；2026-10-10 与 Zenodo API 提供的 MD5 逐一核对一致。校验信息及 SHA-256 见 [source.json](zenodo_18845748/source.json)，作者原说明见 [ORIGINAL_README.md](zenodo_18845748/ORIGINAL_README.md)（保留原文内容，改用此文件名；Git 将文本换行统一为 LF）。原数据包含原始谱和处理结果，教程明确选取下表中的原谱工作表。
 
 | 文件 | 工作表 | X 列 | Y 列 | 教学区间 |
 | --- | --- | --- | --- | --- |

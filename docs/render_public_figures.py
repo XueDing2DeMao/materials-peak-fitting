@@ -67,6 +67,9 @@ def main():
         fig.savefig(OUT / f"{name}-public-fit.png", dpi=300, facecolor="white")
         fig.savefig(OUT / f"{name}-public-fit.pdf", facecolor="white")
         fig.savefig(OUT / f"{name}-public-fit.svg", facecolor="white")
+        # 清除 SVG 路径行尾空格，不改变坐标、标签或视觉内容。
+        svg = OUT / f"{name}-public-fit.svg"
+        svg.write_text("\n".join(line.rstrip() for line in svg.read_text(encoding="utf-8").splitlines()) + "\n", encoding="utf-8")
         plt.close(fig)
         print(name, "exported")
 
