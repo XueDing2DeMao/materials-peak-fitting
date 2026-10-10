@@ -16,7 +16,7 @@ async function draw(){
   if(!plot.value||!residual.value||disposed)return;
   if(drawing){redraw=true;return;}drawing=true;
   try{
-    const layout={...figureLayout(),margin:{l:76,r:24,t:80,b:52},height:plot.value.clientHeight || 360,dragmode:interaction.value==="select"?"select":"pan",selectdirection:"h",
+    const layout={...figureLayout(plot.value.clientWidth),margin:{autoexpand:false,l:84,r:24,t:plot.value.clientWidth < 700 ? 180 : 100,b:60},height:plot.value.clientHeight || 360,dragmode:interaction.value==="select"?"select":"pan",selectdirection:"h",
       xaxis:{...figureAxis("结合能 / eV"),autorange:"reversed"},yaxis:figureAxis("强度（原数据单位）"),
       uirevision:`${props.x[0]}-${props.x.length}-${props.shift}`,
       shapes:[{type:"rect",xref:"x",yref:"paper",x0:props.start,x1:props.end,y0:0,y1:1,layer:"below",line:{color:FIGURE_COLORS.reference,width:1,dash:"dot"},fillcolor:"rgba(80,80,80,.035)",editable:interaction.value==="range"}]};
@@ -26,8 +26,8 @@ async function draw(){
     el.removeAllListeners("plotly_selected");el.removeAllListeners("plotly_relayout");
     el.on("plotly_selected",(e:any)=>{if(interaction.value==="select"&&e?.range?.x){const [a,b]=e.range.x;emit("range",{start:Math.min(a,b),end:Math.max(a,b)});}});
     el.on("plotly_relayout",(e:any)=>{if(e["shapes[0].x0"]!==undefined||e["shapes[0].x1"]!==undefined){const a=e["shapes[0].x0"]??props.start,b=e["shapes[0].x1"]??props.end;if(Number.isFinite(a)&&Number.isFinite(b)&&a!==b)emit("range",{start:Math.min(a,b),end:Math.max(a,b)});}});
-    await Plotly.react(residual.value,props.result?[{x:props.result.x,y:props.result.residuals,type:"scatter",mode:"markers",name:"残差 = 实测 − 拟合",marker:{color:FIGURE_COLORS.residual,size:3.5,opacity:0.8}}]:[],
-      {...figureLayout(),height:residual.value.clientHeight || 160,margin:{l:76,r:24,t:16,b:52},xaxis:{...figureAxis("结合能 / eV"),autorange:"reversed"},yaxis:{...figureAxis("残差"),nticks:3},showlegend:false,shapes:[{type:"line",xref:"paper",x0:0,x1:1,y0:0,y1:0,layer:"below",line:{color:FIGURE_COLORS.reference,width:1,dash:"dash"}}]}, PLOTLY_CHINESE_CONFIG);
+    await Plotly.react(residual.value,props.result?[{x:props.result.x,y:props.result.residuals,type:"scatter",mode:"lines+markers",name:"残差 = 实测 − 拟合",line:{color:FIGURE_COLORS.residual,width:1,shape:"linear"},marker:{color:FIGURE_COLORS.residual,size:3.5,opacity:0.8},connectgaps:false}]:[],
+      {...figureLayout(),height:residual.value.clientHeight || 180,margin:{autoexpand:false,l:84,r:24,t:16,b:60},xaxis:{...figureAxis("结合能 / eV"),autorange:"reversed"},yaxis:{...figureAxis("残差"),nticks:3},showlegend:false,shapes:[{type:"line",xref:"paper",x0:0,x1:1,y0:0,y1:0,layer:"below",line:{color:FIGURE_COLORS.reference,width:1,dash:"dash"}}]}, PLOTLY_CHINESE_CONFIG);
   }finally{drawing=false;if(redraw){redraw=false;await draw();}}
 }
 watch(()=>[props.x,props.y,props.shift,props.start,props.end,props.preview,props.result,interaction.value],()=>nextTick(draw),{deep:true});

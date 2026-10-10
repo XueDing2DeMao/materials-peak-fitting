@@ -182,6 +182,9 @@ html:has(.parameter-dialog[open]) { overflow: hidden; }
 .chart-heading { display: flex; justify-content: space-between; gap: var(--ui-space-3); align-items: flex-start; margin-bottom: var(--ui-space-4); }
 .chart-heading .point-count { flex: none; }
 .chart-canvas { position: relative; }
+.chart, .xps-plot, .residual-chart, .xps-residual { margin-top: 32px; }
+/* 工具栏独占上方留白，避免窄屏时覆盖图例、刻度与数据。 */
+.js-plotly-plot .plotly .modebar-container { top: -30px !important; }
 .chart, .xps-plot { height: var(--plot-height); min-height: var(--plot-height); width: 100%; }
 .residual-chart, .xps-residual { height: var(--plot-residual-height); min-height: var(--plot-residual-height); width: 100%; }
 .chart-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: var(--ui-space-2); padding: var(--ui-space-6); text-align: center; border: 1px dashed var(--ui-border); background: var(--ui-subtle); border-radius: var(--ui-control-radius); }
@@ -307,3 +310,11 @@ td { font-variant-numeric: tabular-nums; overflow-wrap: normal; }
   .parameter-dialog-footer .primary { margin-left: auto; }
 }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+
+.chart-stack { container-type: inline-size; }
+@container (max-width: 700px) {
+  .xps-plot { height: 440px; min-height: 440px; }
+}
+@container (max-width: 400px) {
+  .chart { height: 400px; min-height: 400px; }
+}

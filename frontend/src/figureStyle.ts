@@ -1,5 +1,6 @@
 // 将科研制图的层次、留白和语义配色用于交互图；屏幕字号不等同于印刷字号。
-export const FIGURE_FONT = 'Arial, Helvetica, Microsoft YaHei, sans-serif';
+export const FIGURE_FONT = 'Arial, Helvetica, "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif';
+export const FIGURE_TEXT = { axis: 15, tick: 13, legend: 13, annotation: 12, hover: 13 };
 export const FIGURE_COLORS = {
   ink: '#222222', observation: '#666666', fit: '#0072B2',
   background: '#777777', residual: '#555555', reference: '#999999',
@@ -7,8 +8,8 @@ export const FIGURE_COLORS = {
 
 export function figureAxis(title: string) {
   return {
-    title: { text: title, font: { family: FIGURE_FONT, size: 13, color: FIGURE_COLORS.ink }, standoff: 10 },
-    tickfont: { family: FIGURE_FONT, size: 12, color: FIGURE_COLORS.ink },
+    title: { text: title, font: { family: FIGURE_FONT, size: FIGURE_TEXT.axis, color: FIGURE_COLORS.ink }, standoff: 12 },
+    tickfont: { family: FIGURE_FONT, size: FIGURE_TEXT.tick, color: FIGURE_COLORS.ink },
     showline: true, linecolor: FIGURE_COLORS.ink, linewidth: 1,
     mirror: false, ticks: 'outside', ticklen: 4, tickwidth: 1,
     tickcolor: FIGURE_COLORS.ink, showgrid: false, zeroline: false,
@@ -16,15 +17,15 @@ export function figureAxis(title: string) {
   };
 }
 
-export function figureLayout() {
+export function figureLayout(width?: number) {
   return {
-    font: { family: FIGURE_FONT, size: 12, color: FIGURE_COLORS.ink },
+    font: { family: FIGURE_FONT, size: FIGURE_TEXT.tick, color: FIGURE_COLORS.ink },
     paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff',
-    hoverlabel: { bgcolor: '#ffffff', bordercolor: '#cccccc', font: { family: FIGURE_FONT, size: 12, color: FIGURE_COLORS.ink } },
+    hoverlabel: { bgcolor: '#ffffff', bordercolor: '#cccccc', font: { family: FIGURE_FONT, size: FIGURE_TEXT.hover, color: FIGURE_COLORS.ink } },
     legend: {
-      orientation: 'h', x: 0, xanchor: 'left', y: 1.04, yanchor: 'bottom',
+      orientation: 'h', x: 0, xanchor: 'left', xref: width && width < 400 ? 'container' : 'paper', y: 1, yanchor: 'top', yref: 'container',
       bgcolor: 'rgba(255,255,255,0)', borderwidth: 0,
-      font: { family: FIGURE_FONT, size: 12, color: FIGURE_COLORS.ink },
+      font: { family: FIGURE_FONT, size: FIGURE_TEXT.legend, color: FIGURE_COLORS.ink },
       traceorder: 'normal', itemsizing: 'constant',
     },
   };

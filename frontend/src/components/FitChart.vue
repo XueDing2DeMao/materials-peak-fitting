@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { figureAxis, figureLayout, FIGURE_COLORS, FIGURE_FONT } from "../figureStyle";
+import { figureAxis, figureLayout, FIGURE_COLORS, FIGURE_FONT, FIGURE_TEXT } from "../figureStyle";
 import { overallWidthText } from "../peakGeometry";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Plotly from "plotly.js-dist-min";
@@ -83,7 +83,7 @@ function syncRangeOverlay(): void {
   }
   const extent = dataExtent();
   if (!extent) { rangeOverlay.value = null; return; }
-  const margin = { left: 76, right: 24, top: 68, bottom: 52 };
+  const margin = { left: 84, right: 24, top: width < 400 ? 120 : 80, bottom: 60 };
   const plotWidth = Math.max(120, width - margin.left - margin.right);
   const project = (value: number) => margin.left + ((value - extent.start) / (extent.end - extent.start)) * plotWidth;
   const start = project(range.start); const end = project(range.end);
@@ -254,12 +254,12 @@ function draw(): void {
   const traces: object[] = [{ x: props.x, y: props.y, type: "scatter", mode: "markers", name: "原始数据点", marker: { color: FIGURE_COLORS.observation, size: 4, opacity: 0.7 } }];
   if (rangeEndpointPoints.value.length === 2) traces.push({
     x: rangeEndpointPoints.value.map((point) => point.x), y: rangeEndpointPoints.value.map((point) => point.y), type: "scatter", mode: "markers", name: "分析区间端点",
-    text: rangeEndpointPoints.value.map((point) => point.label), textposition: ["top right", "top left"], textfont: { color: "#315f70", size: 11, family: FIGURE_FONT },
+    text: rangeEndpointPoints.value.map((point) => point.label), textposition: ["top right", "top left"], textfont: { color: "#315f70", size: FIGURE_TEXT.annotation, family: FIGURE_FONT },
     customdata: rangeEndpointPoints.value.map((point) => point.endpoint), marker: { color: ["#087b79", "#236a9a"], size: 11, symbol: "circle", line: { color: "#fff", width: 2 } }, hovertemplate: "%{text}<br>Y = %{y:.6g}<extra></extra>", cliponaxis: false, showlegend: false,
   });
   if (chartAnchors.value.length) traces.push(
     { x: chartAnchors.value.map((anchor) => anchor.x), y: chartAnchors.value.map((anchor) => anchor.y), type: "scatter", mode: "markers", name: "基线锚点", marker: { color: "#d97706", size: 11, symbol: "diamond", line: { color: "#fff", width: 1.5 } } },
-    { x: chartAnchors.value.map((anchor) => anchor.x), y: chartAnchors.value.map((anchor) => anchor.y), type: "scatter", mode: "text", text: chartAnchors.value.map((anchor) => anchor.label), textposition: "top center", textfont: { color: "#9a3412", size: 12, family: FIGURE_FONT }, hoverinfo: "skip", showlegend: false, cliponaxis: false },
+    { x: chartAnchors.value.map((anchor) => anchor.x), y: chartAnchors.value.map((anchor) => anchor.y), type: "scatter", mode: "text", text: chartAnchors.value.map((anchor) => anchor.label), textposition: "top center", textfont: { color: "#9a3412", size: FIGURE_TEXT.annotation, family: FIGURE_FONT }, hoverinfo: "skip", showlegend: false, cliponaxis: false },
   );
   if (props.baselinePreview && (!props.result || props.stale)) traces.push({ x: props.baselinePreview.x, y: props.baselinePreview.baseline, type: "scatter", mode: "lines", name: "待复核基线", line: { color: FIGURE_COLORS.background, dash: "dot", width: 1.5 } });
   const rangeShapes: object[] = isAnalysisRange(props.analysisRange) ? [
@@ -269,7 +269,7 @@ function draw(): void {
   ] : [];
   const center = props.result?.parameters.xc?.value;
   const guideShapes: object[] = Number.isFinite(center) ? [{ type: "line", x0: center, x1: center, y0: 0, y1: 1, yref: "paper", editable: false, line: { color: FIGURE_COLORS.reference, width: 1, dash: "dot" } }] : [];
-  const guideAnnotations: object[] = Number.isFinite(center) ? [{ x: center, y: 1, yref: "paper", text: `${props.stale ? "上次" : ""}峰中心 ${Number(center).toPrecision(6)}`, showarrow: false, yshift: 8, font: { family: FIGURE_FONT, size: 12, color: FIGURE_COLORS.ink }, bgcolor: "rgba(255,255,255,.85)" }] : [];
+  const guideAnnotations: object[] = Number.isFinite(center) ? [{ x: center, y: 1, yref: "paper", text: `${props.stale ? "上次" : ""}峰中心 ${Number(center).toPrecision(6)}`, showarrow: false, yshift: 8, font: { family: FIGURE_FONT, size: FIGURE_TEXT.annotation, color: FIGURE_COLORS.ink }, bgcolor: "rgba(255,255,255,.85)" }] : [];
   if (props.result) {
     const model = peakModelInfo(props.result.model);
     traces.push(
@@ -277,7 +277,7 @@ function draw(): void {
       { x: props.result.x, y: props.result.total_y, type: "scatter", mode: "lines", name: `${props.stale ? "上次拟合 · " : ""}${model?.label ?? "峰模型"} 总拟合`, line: { color: FIGURE_COLORS.fit, width: 2.2, dash: "solid" } },
     );
   }
-  const chartRender = Plotly.react(chart.value, traces, { ...figureLayout(), height: chart.value.clientHeight || 360, margin: { l: 76, r: 24, t: 68, b: 52 }, dragmode: selectionMode.value ? "select" : "pan", selectdirection: "h", xaxis: figureAxis(xAxisTitle.value), yaxis: figureAxis(isXrd.value ? "衍射强度（原数据单位）" : "Y"), shapes: [...rangeShapes, ...guideShapes], annotations: guideAnnotations }, {
+  const chartRender = Plotly.react(chart.value, traces, { ...figureLayout(chart.value.clientWidth), height: chart.value.clientHeight || 360, margin: { autoexpand: false, l: 84, r: 24, t: chart.value.clientWidth < 400 ? 120 : 80, b: 60 }, dragmode: selectionMode.value ? "select" : "pan", selectdirection: "h", xaxis: { ...figureAxis(xAxisTitle.value), nticks: chart.value.clientWidth < 400 ? 3 : 5 }, yaxis: figureAxis(isXrd.value ? "衍射强度（原数据单位）" : "Y"), shapes: [...rangeShapes, ...guideShapes], annotations: guideAnnotations }, {
     ...PLOTLY_CHINESE_CONFIG,
     editable: false,
     modeBarButtonsToRemove: ["select2d", "lasso2d"],
@@ -309,9 +309,9 @@ function draw(): void {
   node.on?.("plotly_doubleclick", restoreRangeControls);
   node.on?.("plotly_deselect", leaveRangeSelection);
   if (residualChart.value && props.result) Plotly.react(residualChart.value,
-    [{ x: props.result.x, y: props.result.residual, type: "scatter", mode: "markers", name: "残差 = 实测 − 拟合", marker: { color: FIGURE_COLORS.residual, size: 4, opacity: 0.8 } }],
-    { ...figureLayout(), height: residualChart.value.clientHeight || 160, margin: { l: 76, r: 24, t: 16, b: 52 }, dragmode: "pan",
-      xaxis: figureAxis(xAxisTitle.value), yaxis: { ...figureAxis("残差"), nticks: 3 },
+    [{ x: props.result.x, y: props.result.residual, type: "scatter", mode: "lines+markers", name: "残差 = 实测 − 拟合", line: { color: FIGURE_COLORS.residual, width: 1, shape: "linear" }, marker: { color: FIGURE_COLORS.residual, size: 4, opacity: 0.8 }, connectgaps: false }],
+    { ...figureLayout(), height: residualChart.value.clientHeight || 180, margin: { autoexpand: false, l: 84, r: 24, t: 16, b: 60 }, dragmode: "pan",
+      xaxis: { ...figureAxis(xAxisTitle.value), nticks: chart.value.clientWidth < 400 ? 3 : 5 }, yaxis: { ...figureAxis("残差"), nticks: 3 },
       shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, layer: "below", line: { color: FIGURE_COLORS.reference, width: 1, dash: "dash" } }], showlegend: false }, PLOTLY_CHINESE_CONFIG);
 }
 function downloadImage(): void {

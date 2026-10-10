@@ -4,9 +4,9 @@
 
 **[中文使用手册](docs/USER_GUIDE.md)** · **[公开实谱与复现](examples/public/README.md)** · **[合成练习](examples/README.md)**
 
-![公开 Raman 实谱拟合与残差示例](docs/images/raman-public-fit.png)
+![当前图表字体与残差点线样式：公开 XRD 实谱](docs/images/16-chart-typography.jpg)
 
-图文手册按当前界面更新，包含实际操作截图与公开实谱拟合图，演示 Raman、XRD、XPS 的选列、区间、参数弹窗、配置恢复和残差诊断。数据来自 [Gnatyuk 等的 Zenodo 数据集](https://doi.org/10.5281/zenodo.18845748)；[完整署名和处理说明](examples/public/README.md)。
+图文手册按当前界面更新，包含实际操作截图与公开实谱拟合图，演示 Raman、XRD、XPS 的选列、区间、参数弹窗、配置恢复和残差诊断，并说明统一图表字号、点线残差及窄屏布局。数据来自 [Gnatyuk 等的 Zenodo 数据集](https://doi.org/10.5281/zenodo.18845748)；[完整署名和处理说明](examples/public/README.md)。
 
 ## 功能
 
