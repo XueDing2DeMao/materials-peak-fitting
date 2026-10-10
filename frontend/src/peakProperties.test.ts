@@ -10,6 +10,19 @@ const mounted:Array<{unmount:()=>void}>=[];
 afterEach(()=>mounted.splice(0).forEach(w=>w.unmount()));
 const result:any={x,raw_y:y,parameters:{wG:{value:1,standard_error:null},wL:{value:4,standard_error:null}},statistics:{r_squared:1,rmse:0,sse:0,adjusted_r_squared:1},model:'psd_voigt2',converged:true,message:'done'};
 describe('峰性质和非对称模型交互',()=>{
+  it('结果摘要使用连续峰顶与整体宽度，并保留醒目的诊断和过期导出保护', async()=>{
+    const r={...result,model:'emg_high',parameters:{xc:{value:2,standard_error:null}},peak_geometry:{peak_position:2.7,fwhm:3.4,area_total:10,reasons:{},warnings:['半高点超出拟合区间']},statistics:{...result.statistics,has_trend:true},analysis_metadata:{uncertainty_warning:'参数标准误不可用'}};
+    const w=mount(ResultsPanel,{props:{result:r}});mounted.push(w);
+    expect(w.get('[data-test="result-peak-position"]').text()).toContain('2.70000');
+    expect(w.get('[data-test="result-fwhm"]').text()).toContain('3.40000');
+    expect(w.get('[data-test="result-alerts"]').text()).toContain('半高点超出拟合区间');
+    expect(w.get('[data-test="result-alerts"]').text()).toContain('参数标准误不可用');
+    expect(w.get('[data-test="solver-details"]').attributes('open')).toBeUndefined();
+    await w.setProps({stale:true});
+    for(const b of w.findAll('.export-actions button'))expect(b.attributes('disabled')).toBeDefined();
+    await w.setProps({stale:false,fitting:true});
+    for(const b of w.findAll('.export-actions button'))expect(b.attributes('disabled')).toBeDefined();
+  });
   it('整体宽度与分量宽度分开，旧结果不猜测整体宽度',()=>{
     expect(overallWidthText(result,'°')).toContain('未计算');
     const r={...result,peak_geometry:{fwhm:2.34,peak_position:2,peak_height:5,area_total:10,area_in_range:8,area_fraction_in_range:.8,hwhm_low:1.17,hwhm_high:1.17,halfmax_low:.83,halfmax_high:3.17,range_start:0,range_end:4,halfmax_within_range:true,reasons:{},warnings:[],area_method:'模型积分',width_method:'连续模型半高交点',uncertainty_note:'未计算派生量标准误'}};
@@ -20,8 +33,7 @@ describe('峰性质和非对称模型交互',()=>{
   it('新增模型可在单峰设置中选择并发出相应参数',async()=>{
     const w=mount(FitControls,{props:{x,y}});mounted.push(w);
     await w.get('[data-test="control-tab-peak"]').trigger('click');
-    const emg=w.findAll('button').find(b=>b.text().includes('EMG（高 X 拖尾）'))!;
-    expect(emg).toBeDefined();await emg.trigger('click');
+    await w.get('[data-test="peak-model"]').setValue('emg_high');
     expect(w.text()).toContain('尾尺度');expect(w.text()).toContain('高斯核标准差');
   });
   it('扩展模型比较需用户主动启用',async()=>{

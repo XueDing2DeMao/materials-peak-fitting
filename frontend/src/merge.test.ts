@@ -7,8 +7,9 @@ import FitChart from "./components/FitChart.vue";
 import FitControls from "./components/FitControls.vue";
 import DatasetSummary from "./components/DatasetSummary.vue";
 import ResultsPanel from "./components/ResultsPanel.vue";
+import XpsWorkbench from "./components/XpsWorkbench.vue";
 import * as api from "./api";
-import type { FitResult } from "./types";
+import type { DatasetInfo, FitResult } from "./types";
 
 // jsdom 没有图形引擎，只替换 Plotly 边界，保留实际 Vue 组件和交互。
 vi.mock("plotly.js-dist-min", () => ({ default: {
@@ -47,6 +48,30 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => { mounted.splice(0).forEach((wrapper) => wrapper.unmount()); });
 
 describe("分析范围合并", () => {
+  it("参数弹窗保留完整初值、边界与固定设置，关闭后不丢失修改", async () => {
+    const wrapper = track(mount(FitControls, { props: { x, y } }));
+    await wrapper.get('[data-test="peak-model"]').setValue('psd_voigt2');
+    const dialog = wrapper.get('dialog').element as HTMLDialogElement;
+    dialog.showModal = () => dialog.setAttribute('open', '');
+    dialog.close = () => { dialog.removeAttribute('open'); dialog.dispatchEvent(new Event('close')); };
+    await wrapper.get('[data-test="edit-parameters"]').trigger('click');
+    expect(dialog.open).toBe(true);
+    const initial = 28914.576388375;
+    await wrapper.get('[data-test="initial-A"]').setValue(String(initial));
+    await wrapper.get('[data-test="bound-wG-lower"]').setValue('0.01');
+    await wrapper.get('[data-test="bound-wG-upper"]').setValue('2');
+    await wrapper.get('[data-test="fixed-A"]').setValue(true);
+    expect(wrapper.emitted('settings-change')).toBeTruthy();
+    await wrapper.get('[data-test="finish-parameters"]').trigger('click');
+    expect(dialog.open).toBe(false);
+    const request = (wrapper.vm as any).buildFitRequest();
+    expect(request.initial_parameters.A).toBe(initial);
+    expect(request.fixed_parameters.A).toBe(initial);
+    expect(request.parameter_bounds.wG).toEqual({ lower: 0.01, upper: 2 });
+    await wrapper.get('[data-test="edit-parameters"]').trigger('click');
+    expect((wrapper.get('[data-test="initial-A"]').element as HTMLInputElement).value).toBe(String(initial));
+    expect(wrapper.findAll('.parameter-row')).toHaveLength(5);
+  });
   it('改模型后丢弃旧的模型比较与自动初值响应', async()=>{
     const wrapper=track(mount(App));
     let finishComparison!:(value:any)=>void,finishAnalysis!:(value:any)=>void;
@@ -199,12 +224,13 @@ describe("XRD 分析模式", () => {
     vi.mocked(api.previewDataset).mockResolvedValue({ x, y });
     vi.mocked(api.runFit).mockResolvedValue(result);
     const wrapper = track(mount(App));
-    expect(wrapper.get('[data-test="analysis-mode"]').findAll("option").map(option => option.text())).toContain("XRD（单峰）");
+    expect(wrapper.get('[data-test="analysis-mode"]').findAll("option").map(option => option.text())).toContain("XRD 单峰拟合");
     wrapper.getComponent(DatasetSummary).vm.$emit("upload", new File(["2theta,intensity"], "XRD.csv"));
     await flushPromises();
     await wrapper.get('[data-test="analysis-mode"]').setValue("xrd");
     expect(wrapper.get(".workbench-grid").isVisible()).toBe(true);
-    expect(wrapper.getComponent(FitChart).text()).toContain("XRD 衍射峰拟合");
+    expect(wrapper.getComponent(FitChart).props("analysisMode")).toBe("xrd");
+    expect(wrapper.getComponent(FitChart).text()).toContain("2θ（°）");
     const controls = wrapper.getComponent(FitControls);
     await controls.get('[data-test="range-start"]').setValue(2);
     await controls.get('[data-test="range-end"]').setValue(8);
@@ -234,5 +260,150 @@ describe("XRD 分析模式", () => {
     await flushPromises();
     const restored = vi.mocked(Plotly.react).mock.calls.filter((args: any[]) => args[0] === wrapper.get(".chart").element).at(-1) as any[];
     expect(restored[2].xaxis.title.text).toBe("X");
+  });
+});
+
+const workbook: DatasetInfo = {
+  dataset_id: "review", filename: "public.xlsx", file_sha256: "a".repeat(64),
+  sheets: ["first", "second"].map(name => ({ name, columns: ["x", "y"], numeric_columns: ["x", "y"], row_count: 12, preview_rows: [] })),
+};
+async function loadedApp() {
+  vi.mocked(api.uploadDataset).mockResolvedValue(workbook);
+  vi.mocked(api.previewDataset).mockResolvedValue({ x, y });
+  const wrapper = track(mount(App));
+  wrapper.getComponent(DatasetSummary).vm.$emit("upload", new File(["data"], "public.xlsx"));
+  await flushPromises();
+  return wrapper;
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+describe("数据与拟合生命周期", () => {
+  it("峰形选择保留设置失效通知并提交所选模型", async () => {
+    const wrapper = track(mount(FitControls, { props: { x, y } }));
+    await wrapper.get('[data-test="control-tab-peak"]').trigger("click");
+    await wrapper.get('[data-test="peak-model"]').setValue("psd_voigt1");
+    expect(wrapper.emitted("settings-change")).toHaveLength(1);
+    await wrapper.get('[data-test="fit-button"]').trigger("click");
+    expect(wrapper.emitted("fit")?.at(-1)?.[0]).toEqual(expect.objectContaining({ model: "psd_voigt1" }));
+  });
+  it("数值输入尚未失焦时也丢弃旧拟合响应", async () => {
+    const wrapper = await loadedApp(), pending = deferred<FitResult>();
+    vi.mocked(api.runFit).mockReturnValueOnce(pending.promise);
+    const controls = wrapper.getComponent(FitControls);
+    controls.vm.$emit("fit", {});
+    const input = controls.get('[data-test="range-start"]');
+    (input.element as HTMLInputElement).value = "2";
+    await input.trigger("input");
+    pending.resolve(result); await flushPromises();
+    expect(wrapper.getComponent(ResultsPanel).props("result")).toBeNull();
+    expect(wrapper.getComponent(ResultsPanel).props("fitting")).toBe(false);
+  });
+  it("计算期间禁用主按钮并忽略重复提交", async () => {
+    const wrapper = await loadedApp(), pending = deferred<FitResult>();
+    vi.mocked(api.runFit).mockReturnValueOnce(pending.promise);
+    const controls = wrapper.getComponent(FitControls);
+    controls.vm.$emit("fit", {}); controls.vm.$emit("fit", {});
+    await nextTick();
+    expect(api.runFit).toHaveBeenCalledTimes(1);
+    expect(controls.get('[data-test="fit-button"]').attributes("disabled")).toBeDefined();
+    expect(controls.get('[data-test="fit-button"]').text()).toContain("拟合中");
+    pending.resolve(result); await flushPromises();
+    expect(wrapper.getComponent(ResultsPanel).props("fitting")).toBe(false);
+  });
+  it("修改设置后可重新提交，旧请求结束不清除新任务状态或覆盖结果", async () => {
+    const wrapper = await loadedApp(), old = deferred<FitResult>(), latest = deferred<FitResult>();
+    vi.mocked(api.runFit).mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise);
+    const controls = wrapper.getComponent(FitControls);
+    controls.vm.$emit("fit", {}); controls.vm.$emit("settings-change"); controls.vm.$emit("fit", {});
+    old.resolve({ ...result, message: "old" }); await flushPromises();
+    expect(wrapper.getComponent(ResultsPanel).props("fitting")).toBe(true);
+    expect(wrapper.getComponent(ResultsPanel).props("result")).toBeNull();
+    latest.resolve(result); await flushPromises();
+    expect(wrapper.getComponent(ResultsPanel).props("result")).toEqual(result);
+  });
+  it("最新结果先返回时也不会被过期结果覆盖", async () => {
+    const wrapper = await loadedApp(), old = deferred<FitResult>(), latest = deferred<FitResult>();
+    vi.mocked(api.runFit).mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise);
+    const controls = wrapper.getComponent(FitControls);
+    controls.vm.$emit("fit", {}); controls.vm.$emit("settings-change"); controls.vm.$emit("fit", {});
+    latest.resolve(result); await flushPromises(); old.resolve({ ...result, message: "old" }); await flushPromises();
+    expect(wrapper.getComponent(ResultsPanel).props("result")).toEqual(result);
+    expect(wrapper.getComponent(ResultsPanel).props("stale")).toBe(false);
+  });
+  it("更换数据后丢弃旧拟合错误", async () => {
+    const wrapper = await loadedApp(), old = deferred<FitResult>();
+    vi.mocked(api.runFit).mockReturnValueOnce(old.promise);
+    wrapper.getComponent(FitControls).vm.$emit("fit", {});
+    vi.mocked(api.uploadDataset).mockResolvedValueOnce({ ...workbook, dataset_id: "new" });
+    wrapper.getComponent(DatasetSummary).vm.$emit("upload", new File(["new"], "new.xlsx"));
+    await flushPromises(); old.reject(new Error("old failure")); await flushPromises();
+    expect(wrapper.getComponent(ResultsPanel).props("error")).toBe("");
+    expect(wrapper.getComponent(ResultsPanel).props("result")).toBeNull();
+    expect(wrapper.getComponent(ResultsPanel).props("fitting")).toBe(false);
+  });
+  it("草稿不改变已应用摘要，取消恢复当前选择，成功后原子更新", async () => {
+    const wrapper = await loadedApp(), data = wrapper.getComponent(DatasetSummary);
+    await data.get('select').setValue("second");
+    expect(data.get(".dataset-file").text()).toContain("first");
+    expect(data.get(".dataset-file").text()).toContain("11 个有效点");
+    await data.get('[data-test="cancel-selection"]').trigger("click");
+    expect((data.get('select').element as HTMLSelectElement).value).toBe("first");
+    await data.get('select').setValue("second");
+    const pending = deferred<{x:number[];y:number[]}>();
+    vi.mocked(api.previewDataset).mockReturnValueOnce(pending.promise);
+    await data.get('[data-test="apply-selection"]').trigger("click");
+    expect(wrapper.getComponent(FitChart).props("x")).toEqual(x);
+    expect(data.get(".dataset-file").text()).toContain("first");
+    pending.resolve({x:[2,3,4,5],y:[1,3,2,1]}); await flushPromises();
+    expect(data.get(".dataset-file").text()).toContain("second");
+    expect(wrapper.getComponent(FitChart).props("x")).toEqual([2,3,4,5]);
+  });
+  it("列预览失败保留当前数据并显示可重试错误", async () => {
+    const wrapper = await loadedApp(), data = wrapper.getComponent(DatasetSummary);
+    vi.mocked(api.previewDataset).mockRejectedValueOnce(new Error("所选列没有有效配对"));
+    data.vm.$emit("preview", {sheet:"second",xColumn:"x",yColumn:"y"}); await flushPromises();
+    expect(wrapper.getComponent(FitChart).props("x")).toEqual(x);
+    expect(data.get(".dataset-file").text()).toContain("first");
+    expect(data.get('[role="alert"]').text()).toContain("所选列没有有效配对");
+  });
+  it("XPS 来源与数组只在新列预览成功后共同更新", async () => {
+    const wrapper = await loadedApp(), data = wrapper.getComponent(DatasetSummary);
+    await wrapper.get('[data-test="analysis-mode"]').setValue("xps");
+    const workbench = wrapper.getComponent(XpsWorkbench);
+    const initialSource = workbench.props("source");
+    await data.get('select').setValue("second");
+    const pending = deferred<{x:number[];y:number[]}>();
+    vi.mocked(api.previewDataset).mockReturnValueOnce(pending.promise);
+    await data.get('[data-test="apply-selection"]').trigger("click");
+    expect(workbench.props("source")).toEqual(initialSource);
+    expect(workbench.props("x")).toEqual(x);
+    pending.resolve({x:[2,3,4,5],y:[1,3,2,1]}); await flushPromises();
+    expect(workbench.props("source")).toEqual({...initialSource,sheet:"second"});
+    expect(workbench.props("x")).toEqual([2,3,4,5]);
+    expect(workbench.props("y")).toEqual([1,3,2,1]);
+  });
+  it("更换文件失败保留旧文件并显示错误", async () => {
+    const wrapper = await loadedApp(), data = wrapper.getComponent(DatasetSummary);
+    vi.mocked(api.uploadDataset).mockRejectedValueOnce(new Error("文件损坏"));
+    data.vm.$emit("upload",new File(["bad"],"bad.xlsx")); await flushPromises();
+    expect(data.get('[role="alert"]').text()).toContain("文件损坏");
+    expect(data.get('[role="alert"]').text()).toContain("public.xlsx");
+    expect(wrapper.getComponent(FitChart).props("x")).toEqual(x);
+  });
+  it("页签方向键移动焦点并同步关联面板", async () => {
+    const wrapper = track(mount(FitControls,{props:{x,y},attachTo:document.body}));
+    const tabs = wrapper.findAll('[role="tab"]');
+    await tabs[0].trigger("keydown",{key:"ArrowRight"});
+    expect(tabs[1].attributes("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(tabs[1].element);
+    expect(tabs[0].attributes("tabindex")).toBe("-1");
+    expect(wrapper.get(`#${tabs[1].attributes("aria-controls")}`).attributes("aria-labelledby")).toBe(tabs[1].attributes("id"));
+    await tabs[1].trigger("keydown",{key:"End"}); expect(tabs[2].attributes("aria-selected")).toBe("true");
+    await tabs[2].trigger("keydown",{key:"Home"}); expect(tabs[0].attributes("aria-selected")).toBe("true");
   });
 });

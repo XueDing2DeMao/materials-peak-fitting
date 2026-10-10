@@ -23,6 +23,3 @@ function value(g:PeakGeometry,key:typeof rows[number][0]) {
     <p v-for="warning in geometry.warnings" :key="warning" class="warning">{{warning}}</p>
   </div>
 </template>
-<style scoped>
-.geometry-panel{margin:12px 0;padding:12px;border:1px solid #d8e5e8;border-radius:8px}.geometry-panel h4{margin:0 0 8px}.geometry-panel table{width:100%;border-collapse:collapse;font-size:12px}.geometry-panel th,.geometry-panel td{text-align:left;padding:6px;border-bottom:1px solid #e4edef}.geometry-panel p{font-size:12px;color:#526b7a;margin:8px 0 0}.geometry-panel .warning{color:#98600c}
-</style>

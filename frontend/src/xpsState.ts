@@ -1,3 +1,4 @@
+import { componentLine, FIGURE_COLORS } from "./figureStyle";
 import type { Candidate, ParamName, XpsModel, XpsComponent, XpsParameter, XpsPreview, XpsRequest, XpsResult, XpsSource } from "./xpsTypes";
 import { PEAK_MODEL_PARAMETERS } from "./peakModels";
 
@@ -149,11 +150,11 @@ export function loadConfiguration(artifact:unknown,x:number[],y:number[],source:
   return JSON.parse(JSON.stringify(c)) as XpsRequest;
 }
 export function chartTraces(x:number[],y:number[],preview:XpsPreview|null,result:XpsResult|null) {
-  const traces:Array<{x:number[];y:number[];name:string;type:string;mode:string;line?:object;marker?:object}>=[{x,y,name:"原始谱",type:"scatter",mode:"lines+markers",line:{color:"#526b7a",width:1.4},marker:{size:2,color:"#526b7a"}}];
-  if(preview)traces.push({x:preview.x,y:preview.baseline,name:"固定背景",type:"scatter",mode:"lines",line:{color:"#c88320",dash:"dash"}});
+  const traces:Array<{x:number[];y:number[];name:string;type:string;mode:string;line?:object;marker?:object}>=[{x,y,name:"原始谱",type:"scatter",mode:"markers",marker:{size:3.5,color:FIGURE_COLORS.observation,opacity:0.7}}];
+  if(preview)traces.push({x:preview.x,y:preview.baseline,name:"固定背景",type:"scatter",mode:"lines",line:{color:FIGURE_COLORS.background,dash:"dash",width:1.5}});
   if(result){
-    traces.push({x:result.x,y:result.total_y,name:"总拟合",type:"scatter",mode:"lines",line:{color:"#087b79",width:2.5}});
-    result.components.forEach(c=>traces.push({x:result.x,y:c.y,name:`${c.label}（净峰）`,type:"scatter",mode:"lines"}));
+    traces.push({x:result.x,y:result.total_y,name:"总拟合",type:"scatter",mode:"lines",line:{color:FIGURE_COLORS.fit,width:2.2}});
+    result.components.forEach(c=>traces.push({x:result.x,y:c.y,name:`${c.label}（净峰）`,type:"scatter",mode:"lines",line:componentLine(c.id)}));
   }
   return traces;
 }

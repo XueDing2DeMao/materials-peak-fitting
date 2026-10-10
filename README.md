@@ -1,19 +1,19 @@
 # 材料科研谱线拟合工具
 
-在本机浏览器中完成一维谱线拟合：支持 Raman/通用单峰、XRD 单峰和独立的 XPS 多峰工作台，可检查基线、参数约束、残差与连续模型峰性质，并导出 CSV、PNG 和 XPS 配置。
+在本机浏览器中完成一维谱线拟合：支持 通用单峰拟合（含 Raman）、XRD 单峰拟合和独立的 XPS 多峰拟合工作台，可检查基线、参数约束、残差与连续模型峰性质，并导出 CSV、PNG 和 XPS 配置。
 
 **[中文使用手册](docs/USER_GUIDE.md)** · **[公开实谱与复现](examples/public/README.md)** · **[合成练习](examples/README.md)**
 
 ![公开 Raman 实谱拟合与残差示例](docs/images/raman-public-fit.png)
 
-图文手册包含 5 张实际操作截图和 3 张实谱拟合图，演示 Raman、XRD、XPS 的选列、区间、配置恢复和残差诊断。数据来自 [Gnatyuk 等的 Zenodo 数据集](https://doi.org/10.5281/zenodo.18845748)；[完整署名和处理说明](examples/public/README.md)。
+图文手册按当前界面更新，包含实际操作截图与公开实谱拟合图，演示 Raman、XRD、XPS 的选列、区间、参数弹窗、配置恢复和残差诊断。数据来自 [Gnatyuk 等的 Zenodo 数据集](https://doi.org/10.5281/zenodo.18845748)；[完整署名和处理说明](examples/public/README.md)。
 
 ## 功能
 
 | 模式 | 峰形 | 背景与分析 |
 | --- | --- | --- |
-| 单峰 / Raman、XRD（单峰） | Gaussian、Lorentz、PsdVoigt1、PsdVoigt2、Split Pseudo-Voigt、双方向 EMG | 无基线、常数、直线、多项式、Spline、B-Spline；初值估计、参数约束、模型比较 |
-| XPS 多峰 | 上述峰形中除 PsdVoigt2 外的六种，可混合 | 无背景、直线、静态 Shirley；候选峰、双峰组、峰位/面积/宽度关联、能量偏移 |
+| 通用单峰拟合、XRD 单峰拟合 | Gaussian、Lorentz、PsdVoigt1、PsdVoigt2、Split Pseudo-Voigt、双方向 EMG | 无基线、常数、直线、多项式、Spline、B-Spline；初值估计、参数约束、模型比较 |
+| XPS 多峰拟合 | 上述峰形中除 PsdVoigt2 外的六种，可混合 | 无背景、直线、静态 Shirley；候选峰、双峰组、峰位/面积/宽度关联、能量偏移 |
 
 峰面积 `A` 为模型全域积分面积，峰位 `xc` 为实际峰顶。请区分整体 FWHM、模型内部宽度和区间面积；数值收敛不等于模型适用或化学态归属正确。详细口径见手册。
 

@@ -9,6 +9,7 @@ export const PLOTLY_CHINESE_CONFIG = {
     "zh-CN": {
       dictionary: {
         "Download plot as a png": "下载图表为 PNG",
+        "Download plot as a PNG": "下载图表为 PNG",
         "Download plot as svg": "下载图表为 SVG",
         "Download plot as jpeg": "下载图表为 JPEG",
         "Download plot as webp": "下载图表为 WebP",

@@ -1,0 +1,35 @@
+/* 界面规格集中维护；科研曲线配色由图表组件独立管理。 */
+:root {
+  color-scheme: light;
+  --ui-font: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  --ui-background: #f5f5f5;
+  --ui-surface: #fff;
+  --ui-subtle: #fafafa;
+  --ui-selected: #ededed;
+  --ui-text: #171717;
+  --ui-text-muted: #595959;
+  --ui-border: #d4d4d4;
+  --ui-border-strong: #737373;
+  --ui-primary: #171717;
+  --ui-on-primary: #fff;
+  --ui-h1: 28px;
+  --ui-h2: 20px;
+  --ui-h3: 16px;
+  --ui-h4: 14px;
+  --ui-body: 14px;
+  --ui-caption: 12px;
+  --ui-control-height: 40px;
+  --ui-control-height-compact: 32px;
+  --ui-control-radius: 6px;
+  --ui-panel-radius: 8px;
+  --ui-panel-padding: 16px;
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-6: 24px;
+  --ui-space-8: 32px;
+  --ui-sidebar: 320px;
+  --plot-height: 360px;
+  --plot-residual-height: 160px;
+}

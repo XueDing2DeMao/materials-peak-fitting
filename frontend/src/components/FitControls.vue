@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import { MODEL_GROUPS, PEAK_MODEL_PARAMETERS, PARAMETER_LABELS, type PeakParameterName, peakModelInfo } from "../peakModels";
 import type { Anchor, AutoPeakAnalysis, BaselineKind, FitRequest, PeakModel } from "../types";
 
-const props = withDefaults(defineProps<{ x: number[]; y: number[]; baselinePreviewed?: boolean; autoAnalysis?: AutoPeakAnalysis | null; analysisMode?: "single" | "xrd" }>(), { baselinePreviewed: false, autoAnalysis: null, analysisMode: "single" });
+const props = withDefaults(defineProps<{ x: number[]; y: number[]; fitting?: boolean; dataLoading?: boolean; baselinePreviewed?: boolean; autoAnalysis?: AutoPeakAnalysis | null; analysisMode?: "single" | "xrd" }>(), { baselinePreviewed: false, autoAnalysis: null, analysisMode: "single" });
 const emit = defineEmits<{
   fit: [request: FitRequest];
   "preview-baseline": [request: FitRequest];
@@ -40,6 +40,31 @@ const rangeEnd = ref(1);
 const rangeStartInput = ref<HTMLInputElement | null>(null);
 const rangeEndInput = ref<HTMLInputElement | null>(null);
 const activeControlTab = ref<"baseline" | "peak" | "fit">("baseline");
+const controlTabs = [{ id: "baseline", label: "区间与基线" }, { id: "peak", label: "峰模型" }, { id: "fit", label: "求解设置" }] as const;
+function navigateTabs(event: KeyboardEvent): void {
+  const current = controlTabs.findIndex(tab => tab.id === activeControlTab.value);
+  const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : event.key === "ArrowRight" ? (current + 1) % 3 : event.key === "ArrowLeft" ? (current + 2) % 3 : null;
+  if (next === null) return;
+  event.preventDefault();
+  activeControlTab.value = controlTabs[next].id;
+  const tablist = event.currentTarget as HTMLElement;
+  void nextTick(() => tablist.querySelector<HTMLButtonElement>(`#control-tab-${activeControlTab.value}`)?.focus());
+}
+const parameterDialog = ref<HTMLDialogElement | null>(null);
+const parameterEditorButton = ref<HTMLButtonElement | null>(null);
+const parameterDialogOpen = ref(false);
+function openParameterEditor(): void {
+  parameterDialog.value?.showModal();
+  parameterDialogOpen.value = true;
+}
+function closeParameterEditor(): void { parameterDialog.value?.close(); }
+function onParameterEditorClosed(): void {
+  parameterDialogOpen.value = false;
+  parameterEditorButton.value?.focus();
+}
+function parameterSummary(value: number): string {
+  return Number.isFinite(value) ? value.toPrecision(6) : "—";
+}
 const stagedFit = ref(true);
 const centerLockEvaluations = ref(20);
 const maxFunctionEvaluations = ref(2000);
@@ -102,18 +127,20 @@ const baselineIsApproved = computed(() => anchorSource.value !== "suggested" || 
 const selectedPointCount = computed(() => props.x.filter((value) => value >= rangeStart.value && value <= rangeEnd.value).length);
 const minimumPointCount = computed(() => Math.max(4, ["none", "line", "constant"].includes(baselineKind.value) ? 0 : requiredAnchors.value));
 const canPreviewBaseline = computed(() => selectedPointCount.value >= minimumPointCount.value && rangeEnd.value > rangeStart.value && enoughAnchors.value && baselineIsApproved.value);
-const canFit = computed(() => canPreviewBaseline.value);
+const canFit = computed(() => canPreviewBaseline.value && !props.fitting && !props.dataLoading);
 const missingAnchors = computed(() => Math.max(0, requiredAnchors.value - usableAnchorCount.value));
 const anchorProgress = computed(() => {
   if (baselineKind.value === "none") return "不扣除基线：峰函数将直接拟合原始数据。";
-  if ((baselineKind.value === "line" || baselineKind.value === "constant") && anchors.value.length === 0) return `未设置锚点：将自动估计${baselineKind.value === "line" ? "两端直线背景" : "背景常数"}。`;
+  if ((baselineKind.value === "line" || baselineKind.value === "constant") && anchors.value.length === 0) return `自动估计${baselineKind.value === "line" ? "两端直线背景" : "背景常数"}。`;
   const count = anchors.value.length === usableAnchorCount.value ? `${usableAnchorCount.value}` : `${usableAnchorCount.value} 个有效（共 ${anchors.value.length} 个）`;
   if (missingAnchors.value) return `已设置 ${count} / ${requiredAnchors.value} 个，还差 ${missingAnchors.value} 个。`;
   if (!baselineIsApproved.value) return `已设置 ${count} / ${requiredAnchors.value} 个。辅助建议，未验证。`;
   return `已设置 ${count} / ${requiredAnchors.value} 个，可以拟合。`;
 });
 const fitBlockedMessage = computed(() => {
-  if (props.x.length < 4) return "请先在左侧选择包含至少 4 个数值点的 X/Y 数据。";
+  if (props.fitting) return "正在拟合；修改设置后可重新提交，旧响应将被丢弃。";
+  if (props.dataLoading) return "正在读取数据，请稍候。";
+  if (props.x.length < 4) return "请先导入并选择至少 4 个有效数据点。";
   if (rangeEnd.value <= rangeStart.value) return "拟合终点必须大于起点。";
   if (selectedPointCount.value < minimumPointCount.value) return `当前拟合区间只有 ${selectedPointCount.value} 个点；${baselineKind.value === "line" ? "至少需要 4 个" : `当前基线至少需要 ${minimumPointCount.value} 个`}。`;
   if (!enoughAnchors.value) return `${activeModel.value.label} 配合 ${baselineKind.value === "bspline" ? "B-Spline" : "当前"} 基线还差 ${missingAnchors.value} 个锚点。可点击“生成建议锚点”。`;
@@ -262,37 +289,73 @@ defineExpose({ addAnchor, buildFitRequest, setAnalysisRange, focusRangeEndpoint 
 
 <template>
   <section class="panel controls-panel">
-    <div class="panel-title"><span class="step-number">2</span><div><h2>拟合设置</h2><p>自由切换设置；拟合时校验基线与参数条件。</p></div></div>
-    <div class="control-tabs" role="tablist" aria-label="拟合设置页签">
-      <button data-test="control-tab-baseline" type="button" role="tab" :aria-selected="activeControlTab === 'baseline'" :class="{ active: activeControlTab === 'baseline' }" @click="activeControlTab = 'baseline'">基线</button>
-      <button data-test="control-tab-peak" type="button" role="tab" :aria-selected="activeControlTab === 'peak'" :class="{ active: activeControlTab === 'peak' }" @click="activeControlTab = 'peak'">峰模型与初值</button>
-      <button data-test="control-tab-fit" type="button" role="tab" :aria-selected="activeControlTab === 'fit'" :class="{ active: activeControlTab === 'fit' }" @click="activeControlTab = 'fit'">高级控制</button>
+    <div class="controls-heading"><h2>拟合设置</h2><span class="hint">{{ x.length ? `${selectedPointCount} 个区间点` : '待导入数据' }}</span></div>
+    <div class="control-tabs" role="tablist" aria-label="拟合设置页签" @keydown="navigateTabs">
+      <button v-for="tab in controlTabs" :key="tab.id" :id="`control-tab-${tab.id}`" :data-test="`control-tab-${tab.id}`" type="button" role="tab" :aria-selected="activeControlTab === tab.id" :aria-controls="`control-pane-${tab.id}`" :tabindex="activeControlTab === tab.id ? 0 : -1" :class="{ active: activeControlTab === tab.id }" @click="activeControlTab = tab.id">{{ tab.label }}</button>
     </div>
-
-    <section v-show="activeControlTab === 'baseline'" class="control-pane" role="tabpanel">
-      <p class="pane-intro">此处只估计与预览基线；不会单独执行峰拟合。所有设置会在一次“开始拟合”中共同求解。</p>
-      <fieldset class="control-group"><legend>分析区间</legend><div class="field-grid"><label>起点 <input ref="rangeStartInput" v-model.number="rangeStart" data-test="range-start" type="number" step="any" @change="updateAnalysisRange" /></label><label>终点 <input ref="rangeEndInput" v-model.number="rangeEnd" data-test="range-end" type="number" step="any" @change="updateAnalysisRange" /></label></div><p class="hint range-helper">主图会标出起点和终点；点击图中同色圆点可定位对应输入框，使用图表工具栏的框选工具选择数据也可直接更新此区间。</p></fieldset>
-      <fieldset class="control-group"><legend>基线</legend><p class="baseline-default">默认以分析区间两端估计直线背景。只有背景明显弯曲或有实验先验时，才需要改用更多锚点。</p><section class="baseline-adjustment"><div class="baseline-adjustment-title"><strong>基线处理</strong><span>可选精调</span></div><div class="baseline-adjustment-content"><label>基线函数<select v-model="baselineKind" data-test="baseline-kind" @change="notifyBaselineChange"><option value="none">无基线（直接拟合）</option><option value="constant">常数</option><option value="line">直线</option><option value="polynomial">Polynomial 多项式</option><option value="spline">Spline 插值样条</option><option value="bspline">B-Spline 平滑样条</option></select></label>
-        <label v-if="baselineKind === 'polynomial'">多项式阶数 <input v-model.number="degree" data-test="polynomial-degree" type="number" min="1" max="8" @change="notifyBaselineChange" /></label><label v-if="baselineKind === 'bspline'">平滑强度 <input v-model.number="smoothing" type="number" min="0" step="any" @change="notifyBaselineChange" /></label>
-        <template v-if="baselineKind !== 'none'"><div class="anchor-header"><div><strong>基线锚点</strong><p class="anchor-progress" role="status">{{ anchorProgress }}</p></div><div class="anchor-actions"><button v-if="baselineKind !== 'line' && x.length" data-test="suggest-anchors" type="button" @click="generateSuggestedAnchors">{{ anchors.length ? `重置为 ${recommendedAnchorCount} 个建议锚点` : `生成 ${recommendedAnchorCount} 个建议锚点` }}</button><button data-test="add-anchor" type="button" @click="addAnchor()">添加</button><button v-if="anchors.length" data-test="clear-anchors" type="button" @click="clearAnchors">清除全部</button></div></div>
-        <p class="hint">橙色编号与图中锚点一一对应。建议点来自背景区的稳健估计，仍应按实验语义复核。</p><label v-if="anchorSource === 'suggested'" class="review-toggle"><input v-model="baselineConfirmed" data-test="confirm-suggested-anchors" type="checkbox" @change="confirmSuggestedAnchors" />我已复核建议锚点</label>
-        <div v-if="orderedAnchors.length" class="anchor-grid-head" aria-hidden="true"><span>序号</span><span>X</span><span>Y</span><span/></div>
-        <div v-for="item in orderedAnchors" :key="item.sourceIndex" data-test="anchor-row" class="anchor-row" :class="{ 'has-duplicate': item.duplicateOf }"><span data-test="anchor-number" class="anchor-number">{{ item.number }}</span><input v-model.number="item.anchor.x" data-test="anchor-x" :aria-label="`锚点 ${item.number} X`" type="number" step="any" @change="markAnchorsAsManual" /><input v-model.number="item.anchor.y" data-test="anchor-y" :aria-label="`锚点 ${item.number} Y`" type="number" step="any" @change="markAnchorsAsManual" /><button type="button" :aria-label="`删除锚点 ${item.number}`" @click="removeAnchor(item.sourceIndex)">×</button><p v-if="item.duplicateOf" data-test="duplicate-anchor-warning" class="anchor-duplicate">锚点 {{ item.duplicateOf }} 和 {{ item.number }} 的 X 坐标重合，不计为独立约束。</p></div></template>
-        <p v-else class="scientific-note">无基线不会扣除背景，适合已完成背景校正的数据。若存在连续背景，请选择常数、直线或样条基线。</p>
-        </div></section></fieldset>
-      <div class="panel-action-row"><button data-test="preview-baseline" type="button" :disabled="!canPreviewBaseline" @click="previewBaseline">查看自动基线（可选）</button><p v-if="baselinePreviewed" class="success">已在主图显示计算基线。</p></div>
-    </section>
-
-    <section v-show="activeControlTab === 'peak'" class="control-pane" role="tabpanel">
-      <p class="pane-intro">选择峰函数，并按实验先验调整初值、边界或固定参数。</p>
-      <fieldset class="control-group"><legend>峰模型</legend><div v-for="group in MODEL_GROUPS" :key="group.label"><h4>{{group.label}}</h4><div class="model-card-grid" role="group" aria-label="峰函数"><button v-for="option in group.models" :key="option.id" :data-test="`model-${option.id}`" :class="{ active: model === option.id }" :aria-pressed="model === option.id" type="button" @click="updateModel(option.id)"><strong>{{ option.label }}</strong><small>{{ option.shortDescription }}</small></button></div></div><div class="model-explainer"><strong>当前：{{ activeModel.label }}</strong><span>{{ activeModel.formula }}</span><small>{{ activeModel.parameterMeaning }}</small></div></fieldset>
-      <section data-test="auto-analysis-card" class="auto-analysis-card"><div><strong>自动单峰分析</strong><p>根据当前基线和所选模型估计峰中心、FWHM 与面积初值。</p></div><button data-test="auto-analyze" type="button" :disabled="!canPreviewBaseline" @click="requestAutoAnalysis">自动分析并采用初值</button><div v-if="autoAnalysis && autoAnalysis.model === model" class="auto-analysis-result"><span>已采用自动初值 · 候选峰 {{ autoAnalysis.candidate_count }} 个 · 中心 {{ autoAnalysis.initial_parameters.xc?.toPrecision(6) }}</span><p v-for="warning in autoAnalysis.warnings" :key="warning" class="warning">{{warning}}</p></div></section>
-      <details class="advanced-parameters"><summary>参数初值与约束 <span>可选</span></summary><p class="hint">留空的上下限将采用模型安全边界；“固定”表示该参数不参与优化。</p><div class="parameter-table"><div class="parameter-head"><span>参数</span><span>初值</span><span>下限</span><span>上限</span><span>固定</span></div><div v-for="name in parameterNames" :key="name" class="parameter-row"><span>{{ parameterLabel[name] }}</span><input v-model.number="parameterDrafts[name].initial" :data-test="name === 'xc' ? 'initial-center' : `initial-${name}`" :aria-label="`${parameterLabel[name]} 初值`" type="number" step="any" @change="notifySettingsChange" /><input v-model="parameterDrafts[name].lower" :data-test="`bound-${name}-lower`" :aria-label="`${parameterLabel[name]} 下限`" type="number" step="any" placeholder="自动" @change="notifySettingsChange" /><input v-model="parameterDrafts[name].upper" :data-test="`bound-${name}-upper`" :aria-label="`${parameterLabel[name]} 上限`" type="number" step="any" placeholder="自动" @change="notifySettingsChange" /><label class="fixed-toggle"><input v-model="parameterDrafts[name].fixed" :data-test="`fixed-${name}`" :aria-label="`固定 ${parameterLabel[name]}`" type="checkbox" @change="notifySettingsChange" /><span>固定</span></label></div></div></details>
-    </section>
-
-    <section v-show="activeControlTab === 'fit'" class="control-pane" role="tabpanel">
-      <p class="pane-intro">拟合时先固定当前基线，再仅优化峰参数。完成后在主图和残差图检查结果。</p><details class="advanced-parameters" open><summary>分阶段拟合 <span>自动</span></summary><label class="stage-toggle"><input v-model="stagedFit" type="checkbox" @change="notifySettingsChange" />固定峰中心预拟合后再释放中心</label><div v-if="stagedFit" class="field-grid"><label>中心固定阶段上限 <input v-model.number="centerLockEvaluations" type="number" min="0" max="500" @change="notifySettingsChange" /></label><label>最大函数评估次数 <input v-model.number="maxFunctionEvaluations" type="number" min="1" max="20000" @change="notifySettingsChange" /></label></div><label>收敛阈值 <input v-model.number="tolerance" type="number" min="0.000000000001" max="0.1" step="any" @change="notifySettingsChange" /></label><p class="hint">为避免误导，“次数”按求解器函数评估次数记录，而非伪造的迭代轮数。</p></details><p class="scientific-note">结果包含总拟合、残差、面积及置信区间；若基线、区间或锚点改变，需要重新拟合。</p>
-    </section>
-    <div class="fit-primary-footer"><button class="primary" data-test="fit-button" type="button" :disabled="!canFit" aria-describedby="fit-blocker" @click="runFit">开始拟合</button><p v-if="!canFit" id="fit-blocker" class="fit-blocker" role="status">{{ fitBlockedMessage }}</p><p v-else class="hint">一次正式拟合：固定当前基线，同时优化峰模型参数。基线预览不会产生正式结果。</p></div>
+    <div class="control-scroll">
+      <section v-show="activeControlTab === 'baseline'" id="control-pane-baseline" aria-labelledby="control-tab-baseline" class="control-pane" role="tabpanel">
+        <fieldset class="control-group"><legend>分析区间{{ analysisMode === 'xrd' ? ' / 2θ（°）' : '' }}</legend>
+          <div v-show="x.length" class="field-grid">
+            <label>起点<input ref="rangeStartInput" v-model.number="rangeStart" data-test="range-start" type="number" step="any" @input="updateAnalysisRange" /></label>
+            <label>终点<input ref="rangeEndInput" v-model.number="rangeEnd" data-test="range-end" type="number" step="any" @input="updateAnalysisRange" /></label>
+          </div>
+          <p v-if="!x.length" class="hint control-empty">导入数据后，可设置区间或在主图框选。</p>
+          <details v-else class="inline-help"><summary>如何选取区间</summary><p class="hint">覆盖目标峰并保留两端背景。主图框选可同步更新区间；点击图中端点可定位输入框。</p></details>
+        </fieldset>
+        <fieldset class="control-group"><legend>基线</legend>
+          <label class="baseline-function"><span class="sr-only">基线函数</span><select v-model="baselineKind" data-test="baseline-kind" @change="notifyBaselineChange"><option value="none">无基线（直接拟合）</option><option value="constant">常数</option><option value="line">直线</option><option value="polynomial">Polynomial 多项式</option><option value="spline">Spline 插值样条</option><option value="bspline">B-Spline 平滑样条</option></select></label>
+          <label v-if="baselineKind === 'polynomial'">多项式阶数<input v-model.number="degree" data-test="polynomial-degree" type="number" min="1" max="8" @input="notifyBaselineChange" /></label>
+          <label v-if="baselineKind === 'bspline'">平滑强度<input v-model.number="smoothing" type="number" min="0" step="any" @input="notifyBaselineChange" /></label>
+          <template v-if="baselineKind !== 'none'">
+            <p class="hint baseline-summary" role="status">{{ anchorProgress }}</p>
+            <details class="anchor-settings" :open="anchors.length > 0 || !['line', 'constant'].includes(baselineKind)">
+              <summary>锚点精调<span>可选</span></summary>
+              <div class="anchor-actions"><button v-if="baselineKind !== 'line' && x.length" data-test="suggest-anchors" type="button" @click="generateSuggestedAnchors">{{ anchors.length ? `重置为 ${recommendedAnchorCount} 个建议锚点` : `生成 ${recommendedAnchorCount} 个建议锚点` }}</button><button data-test="add-anchor" type="button" @click="addAnchor()">添加</button><button v-if="anchors.length" data-test="clear-anchors" type="button" @click="clearAnchors">清除全部</button></div>
+              <p class="hint">锚点应取自背景区，编号对应图中标记；自动建议仍需复核。</p>
+              <label v-if="anchorSource === 'suggested'" class="review-toggle"><input v-model="baselineConfirmed" data-test="confirm-suggested-anchors" type="checkbox" @change="confirmSuggestedAnchors" />我已复核建议锚点</label>
+              <div v-if="orderedAnchors.length" class="anchor-grid-head" aria-hidden="true"><span>序号</span><span>X</span><span>Y</span><span/></div>
+              <div v-for="item in orderedAnchors" :key="item.sourceIndex" data-test="anchor-row" class="anchor-row" :class="{ 'has-duplicate': item.duplicateOf }"><span data-test="anchor-number" class="anchor-number">{{ item.number }}</span><input v-model.number="item.anchor.x" data-test="anchor-x" :aria-label="`锚点 ${item.number} X`" type="number" step="any" @input="markAnchorsAsManual" /><input v-model.number="item.anchor.y" data-test="anchor-y" :aria-label="`锚点 ${item.number} Y`" type="number" step="any" @input="markAnchorsAsManual" /><button type="button" :aria-label="`删除锚点 ${item.number}`" @click="removeAnchor(item.sourceIndex)">×</button><p v-if="item.duplicateOf" data-test="duplicate-anchor-warning" class="anchor-duplicate">锚点 {{ item.duplicateOf }} 和 {{ item.number }} 的 X 坐标重合，不计为独立约束。</p></div>
+            </details>
+          </template>
+          <p v-else class="hint">不扣除背景，适用于已完成背景校正的数据。</p>
+          <div class="panel-action-row"><button data-test="preview-baseline" type="button" :disabled="!canPreviewBaseline" @click="previewBaseline">预览基线</button><p v-if="baselinePreviewed" class="success">已显示在主图</p></div>
+        </fieldset>
+        <details class="inline-help"><summary>基线与拟合的关系</summary><p class="hint">预览只计算基线。正式拟合会固定当前基线，仅优化峰参数；更改基线或区间后须重新拟合。</p></details>
+      </section>
+      <section v-show="activeControlTab === 'peak'" id="control-pane-peak" aria-labelledby="control-tab-peak" class="control-pane" role="tabpanel">
+        <fieldset class="control-group"><legend>峰形</legend>
+          <label class="peak-function"><span class="sr-only">峰形</span><select :value="model" data-test="peak-model" @change="updateModel(($event.target as HTMLSelectElement).value as PeakModel)"><optgroup v-for="group in MODEL_GROUPS" :key="group.label" :label="group.label"><option v-for="option in group.models" :key="option.id" :value="option.id">{{ option.label }}</option></optgroup></select></label>
+          <div class="model-explainer"><p class="hint">{{ activeModel.shortDescription }}</p><span>{{ activeModel.formula }}</span><details class="inline-help"><summary>参数含义</summary><p class="hint">{{ activeModel.parameterMeaning }}</p></details></div>
+        </fieldset>
+        <section data-test="auto-analysis-card" class="auto-analysis-card"><button data-test="auto-analyze" type="button" :disabled="!canPreviewBaseline" @click="requestAutoAnalysis">自动估计并采用初值</button><div v-if="autoAnalysis && autoAnalysis.model === model" class="auto-analysis-result"><span>已采用初值 · 候选峰 {{ autoAnalysis.candidate_count }} 个</span><p v-for="warning in autoAnalysis.warnings" :key="warning" class="warning">{{warning}}</p></div></section>
+        <section class="parameter-overview" aria-label="参数初值与约束摘要">
+          <h3>参数初值与约束</h3>
+          <dl><div v-for="name in parameterNames" :key="name"><dt>{{ name === 'mu' ? 'μ' : name }}</dt><dd>{{ parameterSummary(parameterDrafts[name].initial) }}<small v-if="parameterDrafts[name].fixed">固定</small><small v-else-if="parameterDrafts[name].lower || parameterDrafts[name].upper">已设边界</small></dd></div></dl>
+          <button ref="parameterEditorButton" data-test="edit-parameters" type="button" aria-haspopup="dialog" aria-controls="parameter-editor" :aria-expanded="parameterDialogOpen" @click="openParameterEditor">编辑参数与约束</button>
+        </section>
+      </section>
+      <section v-show="activeControlTab === 'fit'" id="control-pane-fit" aria-labelledby="control-tab-fit" class="control-pane" role="tabpanel">
+        <fieldset class="control-group"><legend>求解策略</legend><label class="stage-toggle"><input v-model="stagedFit" type="checkbox" @change="notifySettingsChange" />固定峰中心预拟合，再释放中心</label></fieldset>
+        <details class="advanced-parameters"><summary>求解参数<span>高级</span></summary><label v-if="stagedFit">中心固定阶段上限<input v-model.number="centerLockEvaluations" type="number" min="0" max="500" @input="notifySettingsChange" /></label><label>最大函数评估次数<input v-model.number="maxFunctionEvaluations" type="number" min="1" max="20000" @input="notifySettingsChange" /></label><label>收敛阈值<input v-model.number="tolerance" type="number" min="0.000000000001" max="0.1" step="any" @input="notifySettingsChange" /></label><p class="hint">次数指求解器函数评估次数，不等同于迭代轮数。</p></details>
+      </section>
+    </div>
+    <dialog id="parameter-editor" ref="parameterDialog" class="parameter-dialog" aria-labelledby="parameter-editor-title" aria-describedby="parameter-editor-description" @close="onParameterEditorClosed">
+      <header class="parameter-dialog-header"><div><h2 id="parameter-editor-title">参数初值与约束</h2><p class="hint">{{ activeModel.label }} · {{ parameterNames.length }} 个参数</p></div><button type="button" aria-label="关闭参数编辑" @click="closeParameterEditor">关闭</button></header>
+      <div class="parameter-dialog-body">
+        <p id="parameter-editor-description" class="hint">上下限留空使用默认边界；固定参数不参与优化。修改即时生效，关闭或 Esc 均保留修改。</p>
+        <div class="parameter-editor-fields">
+          <section v-for="name in parameterNames" :key="name" class="parameter-row" role="group" :aria-label="parameterLabel[name]">
+            <strong class="parameter-name">{{ parameterLabel[name] }}</strong>
+            <label class="parameter-initial">初值<input v-model.number="parameterDrafts[name].initial" :data-test="name === 'xc' ? 'initial-center' : `initial-${name}`" :aria-label="`${parameterLabel[name]} 初值`" :autofocus="name === 'A'" type="number" step="any" @input="notifySettingsChange" /></label>
+            <label class="parameter-lower">下限<input v-model="parameterDrafts[name].lower" :data-test="`bound-${name}-lower`" :aria-label="`${parameterLabel[name]} 下限`" type="number" step="any" placeholder="自动" @input="notifySettingsChange" /></label>
+            <label class="parameter-upper">上限<input v-model="parameterDrafts[name].upper" :data-test="`bound-${name}-upper`" :aria-label="`${parameterLabel[name]} 上限`" type="number" step="any" placeholder="自动" @input="notifySettingsChange" /></label>
+            <label class="fixed-toggle"><input v-model="parameterDrafts[name].fixed" :data-test="`fixed-${name}`" :aria-label="`固定 ${parameterLabel[name]}`" type="checkbox" @change="notifySettingsChange" /><span>固定</span></label>
+          </section>
+        </div>
+      </div>
+      <footer class="parameter-dialog-footer"><p class="hint">返回设置后点击“开始拟合”。</p><button data-test="finish-parameters" type="button" class="primary" @click="closeParameterEditor">完成</button></footer>
+    </dialog>
+    <div class="fit-primary-footer"><button class="primary" data-test="fit-button" type="button" :disabled="!canFit" :aria-describedby="!canFit ? 'fit-blocker' : undefined" @click="runFit">{{ fitting ? "拟合中…" : "开始拟合" }}</button><p v-if="!canFit" id="fit-blocker" class="fit-blocker" role="status">{{ fitBlockedMessage }}</p></div>
   </section>
 </template>

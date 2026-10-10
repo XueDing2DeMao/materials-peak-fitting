@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { figureAxis, figureLayout, FIGURE_COLORS, FIGURE_FONT } from "../figureStyle";
 import { overallWidthText } from "../peakGeometry";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Plotly from "plotly.js-dist-min";
@@ -16,7 +17,6 @@ const props = withDefaults(defineProps<{
   analysisMode?: "single" | "xrd";
 }>(), { analysisRange: null, stale: false, analysisMode: "single" });
 const isXrd = computed(() => props.analysisMode === "xrd");
-const chartTitle = computed(() => isXrd.value ? "XRD 衍射峰拟合" : "光谱与单峰拟合");
 const xAxisTitle = computed(() => isXrd.value ? "2θ（°）" : "X");
 const widthUnit = computed(() => isXrd.value ? "°" : "");
 const emit = defineEmits<{
@@ -42,6 +42,7 @@ const pendingRange = ref<AnalysisRange | null>(null);
 const displayedRange = computed(() => draggingRange.value ?? pendingRange.value ?? props.analysisRange);
 let activeRangeDrag: { kind: RangeDragKind; initial: AnalysisRange; startClientX: number } | null = null;
 let rangeOverlayFrame: number | null = null;
+let sizeObserver: ResizeObserver | undefined;
 function formatAxisValue(value: number): string { return Number(value).toPrecision(6); }
 function isAnalysisRange(value: AnalysisRange | null | undefined): value is AnalysisRange {
   if (!value) return false;
@@ -68,7 +69,7 @@ function syncRangeOverlay(): void {
   const xAxis = node._fullLayout?.xaxis;
   const yAxis = node._fullLayout?.yaxis;
   const width = chart.value.clientWidth || 640;
-  const height = chart.value.clientHeight || 460;
+  const height = chart.value.clientHeight || 360;
   const hasAxisGeometry = Number.isFinite(xAxis?._offset) && Number.isFinite(xAxis?._length)
     && Number.isFinite(yAxis?._offset) && Number.isFinite(yAxis?._length)
     && Array.isArray(xAxis?.range) && Number.isFinite(xAxis.range[0]) && Number.isFinite(xAxis.range[1])
@@ -82,7 +83,7 @@ function syncRangeOverlay(): void {
   }
   const extent = dataExtent();
   if (!extent) { rangeOverlay.value = null; return; }
-  const margin = { left: 58, right: 26, top: 48, bottom: 62 };
+  const margin = { left: 76, right: 24, top: 68, bottom: 52 };
   const plotWidth = Math.max(120, width - margin.left - margin.right);
   const project = (value: number) => margin.left + ((value - extent.start) / (extent.end - extent.start)) * plotWidth;
   const start = project(range.start); const end = project(range.end);
@@ -250,33 +251,33 @@ function draw(): void {
     Plotly.purge(chart.value);
     return;
   }
-  const traces: object[] = [{ x: props.x, y: props.y, type: "scatter", mode: "markers", name: "原始数据点", marker: { color: "#94a8b5", size: 5, opacity: 0.55 } }];
+  const traces: object[] = [{ x: props.x, y: props.y, type: "scatter", mode: "markers", name: "原始数据点", marker: { color: FIGURE_COLORS.observation, size: 4, opacity: 0.7 } }];
   if (rangeEndpointPoints.value.length === 2) traces.push({
-    x: rangeEndpointPoints.value.map((point) => point.x), y: rangeEndpointPoints.value.map((point) => point.y), type: "scatter", mode: "markers+text", name: "分析区间端点",
-    text: rangeEndpointPoints.value.map((point) => point.label), textposition: ["top right", "top left"], textfont: { color: "#315f70", size: 11, family: "IBM Plex Sans, Microsoft YaHei, sans-serif" },
+    x: rangeEndpointPoints.value.map((point) => point.x), y: rangeEndpointPoints.value.map((point) => point.y), type: "scatter", mode: "markers", name: "分析区间端点",
+    text: rangeEndpointPoints.value.map((point) => point.label), textposition: ["top right", "top left"], textfont: { color: "#315f70", size: 11, family: FIGURE_FONT },
     customdata: rangeEndpointPoints.value.map((point) => point.endpoint), marker: { color: ["#087b79", "#236a9a"], size: 11, symbol: "circle", line: { color: "#fff", width: 2 } }, hovertemplate: "%{text}<br>Y = %{y:.6g}<extra></extra>", cliponaxis: false, showlegend: false,
   });
   if (chartAnchors.value.length) traces.push(
     { x: chartAnchors.value.map((anchor) => anchor.x), y: chartAnchors.value.map((anchor) => anchor.y), type: "scatter", mode: "markers", name: "基线锚点", marker: { color: "#d97706", size: 11, symbol: "diamond", line: { color: "#fff", width: 1.5 } } },
-    { x: chartAnchors.value.map((anchor) => anchor.x), y: chartAnchors.value.map((anchor) => anchor.y), type: "scatter", mode: "text", text: chartAnchors.value.map((anchor) => anchor.label), textposition: "top center", textfont: { color: "#9a3412", size: 12, family: "IBM Plex Sans, Microsoft YaHei, sans-serif" }, hoverinfo: "skip", showlegend: false, cliponaxis: false },
+    { x: chartAnchors.value.map((anchor) => anchor.x), y: chartAnchors.value.map((anchor) => anchor.y), type: "scatter", mode: "text", text: chartAnchors.value.map((anchor) => anchor.label), textposition: "top center", textfont: { color: "#9a3412", size: 12, family: FIGURE_FONT }, hoverinfo: "skip", showlegend: false, cliponaxis: false },
   );
-  if (props.baselinePreview && (!props.result || props.stale)) traces.push({ x: props.baselinePreview.x, y: props.baselinePreview.baseline, type: "scatter", mode: "lines", name: "待复核基线", line: { color: "#bc5a20", dash: "dot", width: 3 } });
+  if (props.baselinePreview && (!props.result || props.stale)) traces.push({ x: props.baselinePreview.x, y: props.baselinePreview.baseline, type: "scatter", mode: "lines", name: "待复核基线", line: { color: FIGURE_COLORS.background, dash: "dot", width: 1.5 } });
   const rangeShapes: object[] = isAnalysisRange(props.analysisRange) ? [
-    { type: "rect", xref: "x", x0: props.analysisRange.start, x1: props.analysisRange.end, yref: "paper", y0: 0, y1: 1, layer: "below", editable: false, line: { width: 0 }, fillcolor: "rgba(6, 109, 106, 0.10)" },
-    { type: "line", xref: "x", x0: props.analysisRange.start, x1: props.analysisRange.start, yref: "paper", y0: 0, y1: 1, editable: false, line: { color: "#087b79", width: 2 } },
-    { type: "line", xref: "x", x0: props.analysisRange.end, x1: props.analysisRange.end, yref: "paper", y0: 0, y1: 1, editable: false, line: { color: "#236a9a", width: 2 } },
+    { type: "rect", xref: "x", x0: props.analysisRange.start, x1: props.analysisRange.end, yref: "paper", y0: 0, y1: 1, layer: "below", editable: false, line: { width: 0 }, fillcolor: "rgba(80, 80, 80, 0.035)" },
+    { type: "line", xref: "x", x0: props.analysisRange.start, x1: props.analysisRange.start, yref: "paper", y0: 0, y1: 1, editable: false, line: { color: "#087b79", width: 1, dash: "dot" } },
+    { type: "line", xref: "x", x0: props.analysisRange.end, x1: props.analysisRange.end, yref: "paper", y0: 0, y1: 1, editable: false, line: { color: "#236a9a", width: 1, dash: "dot" } },
   ] : [];
   const center = props.result?.parameters.xc?.value;
-  const guideShapes: object[] = Number.isFinite(center) ? [{ type: "line", x0: center, x1: center, y0: 0, y1: 1, yref: "paper", editable: false, line: { color: "#4d6f86", width: 1.25, dash: "dot" } }] : [];
-  const guideAnnotations: object[] = Number.isFinite(center) ? [{ x: center, y: 1, yref: "paper", text: `${props.stale ? "上次" : ""}峰中心 ${Number(center).toPrecision(6)}`, showarrow: false, yshift: 40, font: { size: 10, color: "#4d6f86" }, bgcolor: "rgba(255,255,255,.85)" }] : [];
+  const guideShapes: object[] = Number.isFinite(center) ? [{ type: "line", x0: center, x1: center, y0: 0, y1: 1, yref: "paper", editable: false, line: { color: FIGURE_COLORS.reference, width: 1, dash: "dot" } }] : [];
+  const guideAnnotations: object[] = Number.isFinite(center) ? [{ x: center, y: 1, yref: "paper", text: `${props.stale ? "上次" : ""}峰中心 ${Number(center).toPrecision(6)}`, showarrow: false, yshift: 8, font: { family: FIGURE_FONT, size: 12, color: FIGURE_COLORS.ink }, bgcolor: "rgba(255,255,255,.85)" }] : [];
   if (props.result) {
     const model = peakModelInfo(props.result.model);
     traces.push(
-      { x: props.result.x, y: props.result.baseline, type: "scatter", mode: "lines", name: `${props.stale ? "上次拟合" : ""}基线`, line: { color: "#d97706", dash: "dash", width: 3 } },
-      { x: props.result.x, y: props.result.total_y, type: "scatter", mode: "lines", name: `${props.stale ? "上次拟合 · " : ""}${model?.label ?? "峰模型"} 总拟合`, line: { color: "#006c67", width: 4.5, dash: "solid" } },
+      { x: props.result.x, y: props.result.baseline, type: "scatter", mode: "lines", name: `${props.stale ? "上次拟合" : ""}基线`, line: { color: FIGURE_COLORS.background, dash: "dash", width: 1.5 } },
+      { x: props.result.x, y: props.result.total_y, type: "scatter", mode: "lines", name: `${props.stale ? "上次拟合 · " : ""}${model?.label ?? "峰模型"} 总拟合`, line: { color: FIGURE_COLORS.fit, width: 2.2, dash: "solid" } },
     );
   }
-  const chartRender = Plotly.react(chart.value, traces, { height: 460, margin: { l: 58, r: 26, t: 48, b: 62 }, title: { text: chartTitle.value, x: 0.02, font: { size: 18, color: "#173242" } }, dragmode: selectionMode.value ? "select" : "pan", selectdirection: "h", xaxis: { title: { text: xAxisTitle.value }, gridcolor: "#e5ecee" }, yaxis: { title: { text: isXrd.value ? "衍射强度（原数据单位）" : "Y" }, gridcolor: "#e5ecee" }, shapes: [...rangeShapes, ...guideShapes], annotations: guideAnnotations, legend: { orientation: "h", y: -0.18 }, paper_bgcolor: "#fff", plot_bgcolor: "#fff" }, {
+  const chartRender = Plotly.react(chart.value, traces, { ...figureLayout(), height: chart.value.clientHeight || 360, margin: { l: 76, r: 24, t: 68, b: 52 }, dragmode: selectionMode.value ? "select" : "pan", selectdirection: "h", xaxis: figureAxis(xAxisTitle.value), yaxis: figureAxis(isXrd.value ? "衍射强度（原数据单位）" : "Y"), shapes: [...rangeShapes, ...guideShapes], annotations: guideAnnotations }, {
     ...PLOTLY_CHINESE_CONFIG,
     editable: false,
     modeBarButtonsToRemove: ["select2d", "lasso2d"],
@@ -307,13 +308,25 @@ function draw(): void {
   node.on?.("plotly_relayout", scheduleRangeOverlay);
   node.on?.("plotly_doubleclick", restoreRangeControls);
   node.on?.("plotly_deselect", leaveRangeSelection);
-  if (residualChart.value && props.result) Plotly.react(residualChart.value, [{ x: props.result.x, y: props.result.residual, type: "scatter", mode: "markers", name: "Residual = 实测 − 拟合", marker: { color: "#567181", size: 4, opacity: 0.6 } }], { height: 190, margin: { l: 58, r: 26, t: 18, b: 48 }, dragmode: "pan", xaxis: { title: { text: xAxisTitle.value }, gridcolor: "#e5ecee" }, yaxis: { title: { text: "Residual = 实测 − 拟合" }, gridcolor: "#e5ecee", zeroline: true, zerolinewidth: 1.5, zerolinecolor: "#506b78" }, shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, line: { color: "#506b78", width: 1.5 } }], showlegend: false, paper_bgcolor: "#fff", plot_bgcolor: "#fff" }, PLOTLY_CHINESE_CONFIG);
+  if (residualChart.value && props.result) Plotly.react(residualChart.value,
+    [{ x: props.result.x, y: props.result.residual, type: "scatter", mode: "markers", name: "残差 = 实测 − 拟合", marker: { color: FIGURE_COLORS.residual, size: 4, opacity: 0.8 } }],
+    { ...figureLayout(), height: residualChart.value.clientHeight || 160, margin: { l: 76, r: 24, t: 16, b: 52 }, dragmode: "pan",
+      xaxis: figureAxis(xAxisTitle.value), yaxis: { ...figureAxis("残差"), nticks: 3 },
+      shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, layer: "below", line: { color: FIGURE_COLORS.reference, width: 1, dash: "dash" } }], showlegend: false }, PLOTLY_CHINESE_CONFIG);
 }
 function downloadImage(): void {
   if (chart.value && props.x.length && !props.stale) Plotly.downloadImage(chart.value, { format: "png", filename: isXrd.value ? "xrd-peak-fit" : "single-peak-fit", width: 1600, height: 900, scale: 2 });
 }
 onMounted(() => {
   draw();
+  if (typeof ResizeObserver !== "undefined" && chart.value) {
+    let previousWidth = 0;
+    sizeObserver = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (width > 0 && width !== previousWidth) { previousWidth = width; void nextTick(draw); }
+    });
+    sizeObserver.observe(chart.value);
+  }
   window.addEventListener("resize", scheduleRangeOverlay);
   window.addEventListener("keydown", handleRangeEditorKeydown);
 });
@@ -322,6 +335,7 @@ watch(() => props.analysisRange, (range) => {
 }, { deep: true });
 watch(() => [props.x, props.y, props.anchors, props.analysisRange, props.baselinePreview, props.result, props.stale, props.analysisMode] as const, () => nextTick(draw), { deep: true });
 onBeforeUnmount(() => {
+  sizeObserver?.disconnect();
   activeRangeDrag = null;
   window.removeEventListener("pointermove", updateRangeDrag);
   window.removeEventListener("pointerup", finishRangeDrag);
@@ -336,25 +350,21 @@ defineExpose({ downloadImage });
   <section class="chart-stack">
     <div class="chart-heading">
       <div>
-        <p class="section-kicker">分析画布</p>
-        <h2>{{ chartTitle }}</h2>
-        <p v-if="isXrd" class="hint">X 列应为 2θ（°），Y 列为衍射强度。选取一个衍射峰附近的区间进行拟合；模式切换不转换原始数据。</p>
-        <p data-test="analysis-summary" class="analysis-summary">主图展示原始数据、分析范围、基线和总拟合，并以峰中心辅助对照。</p>
+        <h2>分析画布</h2>
       </div>
       <span v-if="x.length" class="point-count">{{ x.length }} 个数据点</span>
     </div>
 
     <div v-if="x.length" class="analysis-range-toolbar">
       <div v-if="displayedRange" data-test="analysis-range-readout" class="analysis-range-readout" aria-live="polite">
-        <strong>分析范围</strong>
+        <strong>分析区间</strong>
         <span class="range-start">起点 {{ formatAxisValue(displayedRange.start) }}</span>
         <span class="range-arrow" aria-hidden="true">→</span>
         <span class="range-end">终点 {{ formatAxisValue(displayedRange.end) }}</span>
       </div>
-      <span v-else class="analysis-range-readout pending">尚未选择有效分析范围</span>
-      <span v-if="displayedRange" data-test="analysis-range-adjustment-hint" class="analysis-range-adjustment-hint">
-        <template v-if="rangeEditing">正在调整：拖动左右边界，或拖动图上方箭头整体平移；完成后点击“完成调整”。</template>
-        <template v-else>点击“调整范围”显示手柄；<span data-test="range-recovery-hint">手柄未显示时，双击主图恢复</span></template>
+      <span v-else class="analysis-range-readout pending">请选择有效分析区间</span>
+      <span v-if="displayedRange && rangeEditing" data-test="analysis-range-adjustment-hint" class="analysis-range-adjustment-hint">
+        拖动边界调整区间，拖动上方箭头整体平移。
       </span>
       <button data-test="range-edit-toggle" class="range-edit-button" type="button" :aria-pressed="rangeEditing" @click="toggleRangeEditing">
         <span aria-hidden="true">↔</span>{{ rangeEditing ? "完成调整" : "调整范围" }}
@@ -364,7 +374,7 @@ defineExpose({ downloadImage });
       </button>
     </div>
 
-    <div v-if="result && peakModelInfo(result.model)" class="chart-model-readout"><strong>{{ peakModelInfo(result.model)?.label }}</strong><span>{{ peakModelInfo(result.model)?.formula }}</span><span v-if="peakWidthReadout(result)">{{ peakWidthReadout(result) }}</span><span>拟合区间 {{ result.range_start }} — {{ result.range_end }}</span><em v-if="stale" class="stale-curve-badge">上一次拟合 · 待复核</em></div>
+    <div v-if="result && peakModelInfo(result.model)" class="chart-model-readout"><span v-if="peakWidthReadout(result)">{{ peakWidthReadout(result) }}</span><span>拟合区间 {{ result.range_start }} — {{ result.range_end }}</span><em v-if="stale" class="stale-curve-badge">上一次拟合 · 已过期</em></div>
     <div class="chart-canvas">
       <div ref="chart" class="chart" @dblclick="restoreRangeControls"/>
       <div v-if="rangeOverlay && displayedRange && rangeEditing && !selectionMode" data-test="range-manipulator" class="range-manipulator" :style="rangeOverlayStyle" aria-label="分析范围直接调整">
@@ -379,10 +389,13 @@ defineExpose({ downloadImage });
           <span aria-hidden="true">↔</span>
         </button>
       </div>
-      <div v-if="selectionMode" data-test="range-selection-guide" class="range-selection-guide" role="status"><strong>框选分析区间</strong><span>在主图中水平拖拽，松开鼠标后自动更新起点和终点。</span></div>
-      <div v-if="!x.length" class="chart-empty"><strong>导入曲线后开始分析</strong><span>选择 X/Y 数值列后，在此预览基线并执行拟合。</span></div>
+      <div v-if="selectionMode" data-test="range-selection-guide" class="range-selection-guide" role="status"><strong>框选分析区间</strong><span>水平拖动，松开后更新区间。</span></div>
+      <div v-if="!x.length" class="chart-empty"><strong>请导入数据并选择 X/Y 列</strong></div>
     </div>
-    <p v-if="x.length" class="hint chart-hint">图内空白处可平移，滚轮可缩放。默认不显示编辑手柄，避免遮住峰形；点击“调整范围”后，绿色和蓝色边界可微调，图上方箭头可整体平移。起点、终点圆点对应最近原始数据点，单击可定位左侧输入框；需要重选时，点击上方“框选分析区间”。</p>
-    <section v-if="result" data-test="residual-diagnostic" class="residual-section"><div class="residual-heading"><div><p class="section-kicker">拟合质量</p><h3>残差诊断</h3></div><span>Residual = 实测值 − 拟合值；观察是否围绕零线随机散布。</span></div><div ref="residualChart" class="residual-chart"/></section>
+    <section v-if="result" data-test="residual-diagnostic" class="residual-section"><div class="residual-heading"><h3>残差诊断</h3><span>实测值 − 拟合值；观察是否围绕零线随机散布。</span></div><div ref="residualChart" class="residual-chart"/></section>
+    <details v-if="x.length || isXrd" class="chart-help"><summary>操作说明</summary>
+      <p v-if="isXrd" class="hint">X 为 2θ（°），Y 为衍射强度；切换工作流不转换数据。</p>
+      <p v-if="x.length" class="hint">拖动空白处平移，滚轮缩放。点击“调整范围”显示手柄，双击主图可恢复手柄。点击区间端点定位输入框。</p>
+    </details>
   </section>
 </template>
