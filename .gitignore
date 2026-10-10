@@ -1,0 +1,31 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+# Frontend
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+# 本机数据、分析产物、备份及临时构建
+/data/
+/output/
+/.logs/
+/.merge-backup/
+/.chart-data-*/
+/.ppt-build-*/
+*.log
+# 本机凭证及编辑器文件
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
