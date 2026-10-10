@@ -1,0 +1,73 @@
+{
+  "record_url": "https://zenodo.org/records/18845748",
+  "doi": "10.5281/zenodo.18845748",
+  "title": "Dataset for Challenges in Simultaneous Microstructuring and Hyperdoping of Germanium with Ultrafast Laser",
+  "publication_date": "2026-03-03",
+  "creators": [
+    {
+      "name": "Gnatyuk, Dmytro",
+      "affiliation": "Aalto University",
+      "orcid": "0009-0008-1729-2325"
+    },
+    {
+      "name": "Hamed, Sara",
+      "affiliation": "Aalto University",
+      "orcid": "0000-0003-3699-1777"
+    },
+    {
+      "name": "Ebrahimzadeh, Masoud",
+      "affiliation": null,
+      "orcid": "0000-0003-0357-7596"
+    },
+    {
+      "name": "Liu, Hanchen",
+      "affiliation": "Aalto University",
+      "orcid": "0000-0002-8404-4902"
+    },
+    {
+      "name": "Vähänissi, Ville",
+      "affiliation": "Aalto University",
+      "orcid": "0000-0002-2681-5609"
+    },
+    {
+      "name": "Laukkanen, Pekka",
+      "affiliation": null,
+      "orcid": "0000-0003-4220-985X"
+    },
+    {
+      "name": "Savin, Hele",
+      "affiliation": "Aalto University",
+      "orcid": "0000-0003-3946-7727"
+    },
+    {
+      "name": "Liu, Xiaolong",
+      "affiliation": "Aalto University",
+      "orcid": "0000-0002-1976-492X"
+    }
+  ],
+  "license": {
+    "id": "cc-by-4.0"
+  },
+  "verified_on": "2026-10-10",
+  "files": [
+    {
+      "file": "XRD.xlsx",
+      "md5": "5e3345d069807ef38828a78dd8aea3c3",
+      "sha256": "a04cac38366a40f9b434afbbe9d7560590a7423d33083346ca8f9c215df5e086",
+      "bytes": 344777
+    },
+    {
+      "file": "XPS.xlsx",
+      "md5": "3c5892276a0557b829e97d387d1dd1c6",
+      "sha256": "c2f9f6b56731d8d20f5b53cc1372153a157e566eabed3ab36af41fcec0f034ec",
+      "bytes": 179971
+    },
+    {
+      "file": "Raman.xlsx",
+      "md5": "6a46770af16fd3872cd36fc193c76b88",
+      "sha256": "99e61ed52e5cfe91f47a5fe5c42947a988bb36fd13c4b65063b2caaa288bea4c",
+      "bytes": 446826
+    }
+  ],
+  "modifications": "Original XLSX files copied unchanged; tutorial fits and figures are new analyses, not the data authors' conclusions."
+}

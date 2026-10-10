@@ -1,0 +1,117 @@
+[
+  {
+    "case": "raman",
+    "file": "Raman.xlsx",
+    "sheet": "Bare Ge",
+    "x_column": "Wavenumber",
+    "y_column": "Pristine #1",
+    "requested_range": [
+      280,
+      320
+    ],
+    "valid_full_spectrum_points": 1600,
+    "selected_points": 52,
+    "selection_reason": "手册演示单峰操作所选的单条原谱与局部峰区；非总体统计",
+    "preprocessing": "数值化、去除无效配对行、按 X 排序；未平滑、未归一化、未合并重复测量",
+    "model": "psd_voigt1",
+    "baseline_kind": "line",
+    "anchors": [],
+    "anchor_source": "endpoint_default",
+    "initial_parameters": {
+      "A": 109195.7196244967,
+      "xc": 300.724,
+      "w": 4.650382296420162,
+      "mu": 0.5
+    },
+    "parameters": {
+      "A": 115277.38893743537,
+      "xc": 301.1108999606029,
+      "w": 4.229207359307243,
+      "mu": 0.6167766102826924
+    },
+    "r_squared": 0.9994974448556669,
+    "rmse": 115.30471124436617
+  },
+  {
+    "case": "xrd",
+    "file": "XRD.xlsx",
+    "sheet": "BareGe",
+    "x_column": "2Theta",
+    "y_column": "Pristine Ge",
+    "requested_range": [
+      65.8,
+      66.6
+    ],
+    "valid_full_spectrum_points": 2670,
+    "selected_points": 31,
+    "selection_reason": "手册演示单峰操作所选的单条原谱与局部峰区；非总体统计",
+    "preprocessing": "数值化、去除无效配对行、按 X 排序；未平滑、未归一化、未合并重复测量",
+    "model": "psd_voigt1",
+    "baseline_kind": "line",
+    "anchors": [],
+    "anchor_source": "endpoint_default",
+    "initial_parameters": {
+      "A": 28914.576388375,
+      "xc": 66.199464738,
+      "w": 0.10093494592230456,
+      "mu": 0.5
+    },
+    "parameters": {
+      "A": 30918.372886741294,
+      "xc": 66.20815552466094,
+      "w": 0.05183934682088971,
+      "mu": 0.5241284452371454
+    },
+    "r_squared": 0.9973258457467556,
+    "rmse": 4947.210478813264
+  },
+  {
+    "case": "xps",
+    "source": {
+      "filename": "XPS.xlsx",
+      "file_sha256": "c2f9f6b56731d8d20f5b53cc1372153a157e566eabed3ab36af41fcec0f034ec",
+      "sheet": "Ge2p",
+      "x_column": "Binding Energy (E)",
+      "y_column": "Pristine Ge #1"
+    },
+    "range": [
+      1208.0,
+      1260.0
+    ],
+    "valid_full_spectrum_points": 521,
+    "selected_points": 521,
+    "statistics": {
+      "points": 521,
+      "free_parameters": 10,
+      "degrees_of_freedom": 511,
+      "rss": 179405117884.64798,
+      "rmse": 18556.606238622775,
+      "residual_variance": 351086336.3691741,
+      "r_squared": 0.9554388312681084,
+      "aic": 10261.381543814083,
+      "aicc": 10261.812916363102,
+      "durbin_watson": 0.008562292737159022,
+      "residual_mean": 6288.361396644158,
+      "residual_standard_deviation": 17475.420105387962,
+      "bic": 10303.939044231616
+    },
+    "diagnostics": {
+      "identifiable": true,
+      "jacobian_rank": 10,
+      "scaled_condition": 11.418660334046196,
+      "bound_parameters": [
+        "p3.mu",
+        "p4.mu"
+      ],
+      "strong_correlations": [],
+      "lag1_correlation": 0.9951619449806397,
+      "uncertainty_available": false,
+      "warnings": [
+        "存在贴边参数；相关参数的线性标准误不可用",
+        "标准误仅在当前固定背景、模型及约束下成立，不含背景选择与能量校准误差",
+        "残差具有明显相邻相关性；收敛和高 R² 不代表模型适用"
+      ]
+    },
+    "interpretation": "两组探索性双峰，仅演示配置和约束；保留结构化残差，不确认化学态"
+  }
+]

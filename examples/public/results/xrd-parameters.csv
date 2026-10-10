@@ -1,0 +1,66 @@
+parameter,value,standard_error,ci95_lower,ci95_upper,lower_bound,upper_bound,fixed,uncertainty_reason
+A,30918.372886741294,602.7259292152473,,,,,False,
+xc,66.20815552466094,0.00031428317573615994,,,,,False,
+w,0.05183934682088971,0.0011917843338294539,,,,,False,
+mu,0.5241284452371454,0.060370972408764,,,,,False,
+
+fit_configuration,value
+model,psd_voigt1
+range_start,65.805556257
+range_end,66.593373218
+baseline_kind,line
+baseline_degree,2
+baseline_smoothing,0.0
+baseline_anchor_count,2
+baseline_anchor_source,endpoint_default
+baseline_baseline_confirmed,true
+solver,Levenberg-Marquardt
+iterations,9
+converged,True
+message,Both `ftol` and `xtol` termination conditions are satisfied.
+analysis_workflow,fixed-baseline-subtracted single positive peak
+analysis_offset,y0 fixed at 0 after baseline subtraction
+analysis_weighting,none (unweighted least squares)
+analysis_initialization,Savitzky-Golay smoothing + prominence peak detection
+analysis_automatic_candidates,1
+analysis_staged_fit,fixed center pre-fit followed by released-center convergence
+
+metric,value
+r_squared,0.9973258457467556
+adjusted_r_squared,0.9970287174963952
+rmse,4947.210478813264
+sse,758721637.1720726
+points,31
+free_parameters,4
+degrees_of_freedom,27
+reduced_chi_square,28100801.376743432
+residual_mean,-1616.6201369600897
+residual_standard_deviation,4752.909131918059
+durbin_watson,1.8583820072146127
+outlier_count,1
+has_trend,False
+
+derived_parameter,value
+area_total,30918.372886741294
+area_in_range,30207.620969769327
+peak_height,465643.48711504566
+w_fwhm,0.05183934682088971
+legacy.area_in_range.method,采样点梯形积分
+
+peak_geometry,value,unit,reason
+geometry.peak_position,66.20815552466094,X 单位,
+geometry.peak_height,465643.48711504566,Y 单位,
+geometry.fwhm,0.05183934682088971,X 单位,
+geometry.hwhm_low,0.025919673410444856,X 单位,
+geometry.hwhm_high,0.025919673410444856,X 单位,
+geometry.halfmax_low,66.1822358512505,X 单位,
+geometry.halfmax_high,66.23407519807138,X 单位,
+geometry.area_total,30918.372886741294,Y 单位 × X 单位,
+geometry.area_in_range,30240.18038448474,Y 单位 × X 单位,
+geometry.area_fraction_in_range,0.9780650649133162,无量纲,
+geometry.range_start,65.805556257,X 单位,
+geometry.range_end,66.593373218,X 单位,
+geometry.halfmax_within_range,True,,
+geometry.area_method,模型积分（解析原函数/CDF）,,
+geometry.width_method,连续模型半高交点,,
+geometry.uncertainty_note,派生量未计算标准误；全域面积包含区间外模型外推,,
