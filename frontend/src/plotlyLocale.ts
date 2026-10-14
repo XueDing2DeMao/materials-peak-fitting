@@ -3,7 +3,8 @@ export const PLOTLY_CHINESE_CONFIG = {
   responsive: true,
   displaylogo: false,
   displayModeBar: true,
-  scrollZoom: true,
+  // 滚轮留给页面滚动；图表缩放通过工具栏显式触发，避免浏览时误操作。
+  scrollZoom: false,
   locale: "zh-CN",
   locales: {
     "zh-CN": {
@@ -13,7 +14,7 @@ export const PLOTLY_CHINESE_CONFIG = {
         "Download plot as svg": "下载图表为 SVG",
         "Download plot as jpeg": "下载图表为 JPEG",
         "Download plot as webp": "下载图表为 WebP",
-        Zoom: "缩放",
+        Zoom: "框选缩放",
         Pan: "平移",
         "Box Select": "矩形选择",
         "Lasso Select": "套索选择",

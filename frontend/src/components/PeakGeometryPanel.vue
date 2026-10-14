@@ -18,8 +18,10 @@ function value(g:PeakGeometry,key:typeof rows[number][0]) {
       <tbody><tr v-for="[key,label,kind] in rows" :key="key"><td>{{label}}</td><td>{{value(geometry,key)}}</td>
         <td>{{geometry.reasons[key]??(kind==='x'?(unit||'X 单位'):kind==='y'?'Y 单位':kind==='area'?`Y × ${unit||'X 单位'}`:'无量纲')}}</td></tr></tbody>
     </table>
-    <p>面积 A 为模型在全域的积分；区间外部分属于模型外推。{{geometry.area_method}}；{{geometry.width_method}}。</p>
-    <p>{{geometry.uncertainty_note}}</p>
+    <details class="ui-help"><summary>计算口径与不确定度</summary>
+      <p>面积 A 为模型全域积分，区间外为模型外推。{{geometry.area_method}}；{{geometry.width_method}}。</p>
+      <p>{{geometry.uncertainty_note}}</p>
+    </details>
     <p v-for="warning in geometry.warnings" :key="warning" class="warning">{{warning}}</p>
   </div>
 </template>

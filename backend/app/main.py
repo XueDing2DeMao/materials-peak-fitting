@@ -11,7 +11,7 @@ from time import monotonic
 from uuid import uuid4
 
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -20,6 +20,7 @@ from .datasets import ParsedWorkbook, parse_upload, select_xy
 from .fitting import FitInput, FitResult, analyze_single_peak, compare_single_peak_models, fit_single_peak, preview_fixed_baseline
 from .schemas import ExportPayload, FitPayload, ModelComparisonPayload, PreviewPayload
 from .xps_routes import router as xps_router
+from .multipeak_routes import router as multipeak_router
 from .peak_properties import geometry_rows
 
 
@@ -136,17 +137,31 @@ async def upload_dataset(file: UploadFile = File(...)) -> dict[str, object]:
 
 
 @app.post("/api/preview")
-def preview(payload: PreviewPayload) -> dict[str, list[float]]:
+def preview(payload: PreviewPayload) -> dict[str, object]:
     """Return selected data without retaining a copy in browser storage."""
     _discard_expired_datasets()
     stored = _datasets.get(payload.dataset_id)
     if stored is None:
         raise HTTPException(status_code=404, detail="数据已失效，请重新导入文件")
     try:
-        x, y = select_xy(stored.workbook, payload.sheet, payload.x_column, payload.y_column)
+        from .dataset_audit import select_xy_audited
+        x, y, audit = select_xy_audited(stored.workbook, payload.sheet, payload.x_column, payload.y_column)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"x": x.tolist(), "y": y.tolist()}
+    return {"x": x.tolist(), "y": y.tolist(), "audit": audit}
+
+
+@app.get("/api/datasets/{dataset_id}/rows")
+def dataset_rows(dataset_id: str, sheet: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)) -> dict:
+    from .dataset_rows import dataset_page
+    _discard_expired_datasets()
+    stored = _datasets.get(dataset_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="数据已失效，请重新导入文件")
+    try:
+        return dataset_page(stored.workbook, sheet, offset, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/fit")
@@ -306,6 +321,7 @@ def export(payload: ExportPayload) -> Response:
 
 
 app.include_router(xps_router)
+app.include_router(multipeak_router)
 
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 if frontend_dist.exists():

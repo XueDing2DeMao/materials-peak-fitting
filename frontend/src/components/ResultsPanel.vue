@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import PeakResultTable from './PeakResultTable.vue';
+import SamplingDiagnostics from './SamplingDiagnostics.vue';
+import { presentSinglePeak } from '../resultPresentation';
+import { resultDiagnostics } from '../resultDiagnostics';
 import PeakGeometryPanel from "./PeakGeometryPanel.vue";
 import { overallWidthText } from "../peakGeometry";
 import { peakModelInfo } from "../peakModels";
 import type { FitResult, ModelComparison } from "../types";
-const props = defineProps<{ result: FitResult | null; comparison?: ModelComparison | null; error?: string; fitting?: boolean; comparing?: boolean; stale?: boolean; analysisMode?: "single" | "xrd" }>();
-const emit = defineEmits<{ export: [kind: "curves" | "parameters"]; "export-image": []; compare: [includeAsymmetric:boolean] }>();
+const props = defineProps<{ result: FitResult | null; comparison?: ModelComparison | null; error?: string; fitting?: boolean; comparing?: boolean; stale?: boolean; selectedPeak?:string;peakId?:string;peakLabel?:string;analysisMode?: "single" | "xrd" }>();
+const emit = defineEmits<{ export: [kind: "curves" | "parameters"]; "export-image": []; select:[id:string];compare: [includeAsymmetric:boolean] }>();
 const includeAsymmetric=ref(false);
 function number(value: number | null | undefined): string { return value == null || !Number.isFinite(value) ? "—" : value.toPrecision(6); }
 const xUnit = computed(() => props.analysisMode === "xrd" ? "°" : "X 单位");
-const resultWarnings = computed(() => [...new Set([
-  ...(props.result?.peak_geometry?.warnings ?? []),
-  props.result?.analysis_metadata?.initialization_warning,
-  props.result?.analysis_metadata?.uncertainty_warning,
-].filter((warning): warning is string => Boolean(warning)))]);
+const diagnosis=computed(()=>resultDiagnostics(props.result,{busy:props.fitting}));
+const peaks=computed(()=>props.result?[presentSinglePeak(props.result,props.peakId,props.peakLabel)]:[]);
+const resultWarnings=computed(()=>diagnosis.value.warnings);
 const trendMessage = computed(() => props.result?.statistics.has_trend === true
   ? "残差存在明显趋势，请复核基线、区间或峰模型。"
   : props.result?.statistics.has_trend === false
@@ -29,17 +31,17 @@ const parameterMeaning = computed<Record<string, string>>(() => ({
   mu: "Lorentzian 分量权重；1−μ 为 Gaussian 分量权重",
 }));
 const fitQualityMeaning = {
-  rSquared: "模型解释的数据变异比例；越接近 1 越好",
-  adjustedRSquared: "校正自由参数数量后的决定系数；越接近 1 越好",
-  rmse: "典型拟合偏差；越小越好",
-  rss: "残差平方和：总未解释偏差；越小越好",
+  rSquared: "模型解释的数据变异比例，需结合残差判断",
+  adjustedRSquared: "考虑自由参数数量的决定系数",
+  rmse: "残差的均方根，与 Y 同单位",
+  rss: "残差平方和",
   reducedChiSquare: "RSS / 自由度；单位为强度²，未按测量方差归一化",
   degreesOfFreedom: "数据点数减去自由参数数",
 };
 const residualMeaning = {
   mean: "残差均值：应接近 0",
-  standardDeviation: "残差离散程度；越小越好",
-  durbinWatson: "相邻残差相关性诊断；接近 2 更理想",
+  standardDeviation: "残差的离散程度",
+  durbinWatson: "相邻残差相关性诊断",
   outlierCount: "残差显著偏离的观测点数量",
 };
 const derivedMeaning: Record<string, string> = {
@@ -57,7 +59,7 @@ function derivedParameterMeaning(name: string): string {
   <section class="panel results-panel">
     <header class="results-heading">
       <h2>拟合结果</h2>
-      <span v-if="result" class="result-state">{{ stale ? '已过期' : fitting ? '拟合中' : result.converged ? '已收敛' : '未收敛' }}</span>
+      <span v-if="result" class="result-state">{{ stale ? '已过期' : diagnosis.calculation }}</span>
     </header>
     <div class="results-scroll">
       <p v-if="fitting" class="hint" role="status">拟合中…</p>
@@ -65,22 +67,21 @@ function derivedParameterMeaning(name: string): string {
       <template v-if="result">
         <p v-if="stale" data-test="stale-result-notice" class="stale-result" role="status"><strong>设置已变更，以下为上一次拟合。</strong> 重新拟合后可导出。</p>
         <p class="result-context"><strong>{{ peakModelInfo(result.model)?.label ?? result.model ?? '峰模型' }}</strong><span v-if="result.statistics.points">{{ result.statistics.points }} 个数据点</span></p>
-        <dl class="result-key-values" aria-label="核心峰性质">
-          <div><dt>{{ analysisMode === 'xrd' ? '峰顶 2θ' : '峰顶位置' }}</dt><dd data-test="result-peak-position">{{ number(result.peak_geometry?.peak_position) }} <small>{{ xUnit }}</small></dd></div>
-          <div><dt>整体 FWHM</dt><dd data-test="result-fwhm">{{ number(result.peak_geometry?.fwhm) }} <small>{{ xUnit }}</small></dd></div>
-          <div><dt>全峰面积</dt><dd>{{ number(result.peak_geometry?.area_total) }} <small>{{ analysisMode === 'xrd' ? '强度 × °' : 'Y × X 单位' }}</small></dd></div>
-        </dl>
+        <PeakResultTable :peaks="peaks" :unit="xUnit" :stale="stale" :selected-peak="selectedPeak" @select="emit('select',$event)" />
+        <SamplingDiagnostics :x="result.x" :peaks="peaks" :unit="xUnit" :xrd="analysisMode==='xrd'" />
+        <p class="result-diagnostic-state" role="status">计算：{{diagnosis.calculation}} · 诊断：{{diagnosis.diagnostic}} · 人工状态：{{diagnosis.review}}</p>
+        <details class="result-details"><summary>计算口径</summary><p v-for="note in diagnosis.notes" :key="note" class="hint">{{note}}</p></details>
         <div class="result-quality" aria-label="拟合质量摘要">
-          <div><span>R²</span><strong>{{ number(result.statistics.r_squared) }}</strong></div>
+          <div><span>R²（扣背景信号）</span><strong>{{ number(result.statistics.r_squared) }}</strong></div>
           <div><span>RMSE</span><strong>{{ number(result.statistics.rmse) }}</strong></div>
         </div>
-        <p class="result-quality-note">收敛不代表模型一定适用。{{ trendMessage }}</p>
+        <p class="result-quality-note">收敛不等于模型适用。{{ trendMessage }}</p>
         <div v-if="resultWarnings.length || !result.converged" data-test="result-alerts" class="result-alerts" role="status">
           <strong>需要复核</strong>
           <p v-if="!result.converged">本次拟合未收敛，请检查区间、初值与参数约束。</p>
           <p v-for="warning in resultWarnings" :key="warning">{{ warning }}</p>
         </div>
-        <p v-if="!result.peak_geometry" class="hint">摘要峰性质尚未计算，请重新拟合。{{ overallWidthText(result, xUnit) }}</p>
+        <p v-if="!result.peak_geometry" class="hint">连续峰性质尚未计算，峰顶位置和整体 FWHM 为 —，请重新拟合。</p>
         <details class="result-details">
           <summary>峰参数与置信区间</summary>
           <table class="parameter-results"><tbody><tr v-for="(parameter, name) in result.parameters" :key="name"><th><span>{{ name }}</span><small v-if="parameterMeaning[String(name)]">{{ parameterMeaning[String(name)] }}</small></th><td><span class="parameter-value">{{ number(parameter.value) }}</span><span>± {{ number(parameter.standard_error) }}</span><span v-if="parameter.confidence_interval">95% CI {{ number(parameter.confidence_interval[0]) }} — {{ number(parameter.confidence_interval[1]) }}</span><span v-else>95% CI —</span><small v-if="parameter.uncertainty_reason">{{parameter.uncertainty_reason}}</small><span v-if="parameter.fixed" class="parameter-fixed">固定</span></td></tr></tbody></table>
@@ -93,7 +94,7 @@ function derivedParameterMeaning(name: string): string {
         <details class="result-details">
           <summary>质量与残差指标</summary>
           <table><tbody>
-        <tr><th class="result-label"><span>R²</span><small>{{ fitQualityMeaning.rSquared }}</small></th><td>{{ number(result.statistics.r_squared) }}</td></tr>
+        <tr><th class="result-label"><span>R²（扣背景信号）</span><small>{{ fitQualityMeaning.rSquared }}</small></th><td>{{ number(result.statistics.r_squared) }}</td></tr>
         <tr><th class="result-label"><span>调整 R²</span><small>{{ fitQualityMeaning.adjustedRSquared }}</small></th><td>{{ number(result.statistics.adjusted_r_squared) }}</td></tr>
         <tr><th class="result-label"><span>RMSE</span><small>{{ fitQualityMeaning.rmse }}</small></th><td>{{ number(result.statistics.rmse) }}</td></tr>
         <tr><th class="result-label"><span>RSS</span><small>{{ fitQualityMeaning.rss }}</small></th><td>{{ number(result.statistics.sse) }}</td></tr>
@@ -117,7 +118,7 @@ function derivedParameterMeaning(name: string): string {
         </details>
         <details class="result-details" :open="comparing || !!comparison">
           <summary>模型比较</summary>
-          <section class="comparison-panel"><div><p>在相同区间和基线下比较峰形，同名参数沿用约束；推荐模型需手动选择。</p><label><input v-model="includeAsymmetric" data-test="include-asymmetric" type="checkbox" />加入非对称模型</label></div><button data-test="compare-models" type="button" :disabled="comparing || fitting || stale" @click="emit('compare',includeAsymmetric)">{{ comparing ? "比较中…" : "比较模型" }}</button><table v-if="comparison" data-test="comparison-table"><thead><tr><th>模型</th><th>R²</th><th>RMSE</th><th>AICc</th><th>BIC</th></tr></thead><tbody><tr v-for="row in comparison.rows" :key="row.model" :class="{ recommended: row.model === comparison.recommended_model }"><td>{{ peakModelInfo(row.model)?.label ?? row.model }}<small v-if="row.model === comparison.recommended_model">推荐</small></td><td>{{ number(row.r_squared) }}</td><td>{{ number(row.rmse) }}</td><td>{{ number(row.aicc) }}</td><td>{{ number(row.bic) }}</td></tr></tbody></table></section>
+          <section class="comparison-panel"><div><p>在相同区间和基线下比较峰形，同名参数沿用约束；推荐模型需手动选择。</p><label><input v-model="includeAsymmetric" data-test="include-asymmetric" type="checkbox" />加入非对称模型</label></div><button data-test="compare-models" type="button" :disabled="comparing || fitting || stale" @click="emit('compare',includeAsymmetric)">{{ comparing ? "比较中…" : "比较模型" }}</button><table v-if="comparison" data-test="comparison-table"><thead><tr><th>模型</th><th>R²（扣背景）</th><th>RMSE</th><th>AICc</th><th>BIC</th></tr></thead><tbody><tr v-for="row in comparison.rows" :key="row.model" :class="{ recommended: row.model === comparison.recommended_model }"><td>{{ peakModelInfo(row.model)?.label ?? row.model }}<small v-if="row.model === comparison.recommended_model">推荐</small></td><td>{{ number(row.r_squared) }}</td><td>{{ number(row.rmse) }}</td><td>{{ number(row.aicc) }}</td><td>{{ number(row.bic) }}</td></tr></tbody></table></section>
         </details>
       </template>
       <p v-else-if="stale" class="stale-result" role="status">设置已变更，请重新拟合。</p>
@@ -129,6 +130,7 @@ function derivedParameterMeaning(name: string): string {
         <button type="button" :disabled="stale || fitting" @click="emit('export', 'curves')">曲线 CSV</button>
         <button type="button" :disabled="stale || fitting" @click="emit('export', 'parameters')">参数 CSV</button>
         <button data-test="export-image" type="button" :disabled="stale || fitting" @click="emit('export-image')">拟合图 PNG</button>
+      <slot name="export-extra" />
       </div>
     </footer>
   </section>

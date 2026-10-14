@@ -1,8 +1,11 @@
+import * as protection from './useWorkProtection';
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import Plotly from "plotly.js-dist-min";
 import App from "./App.vue";
+import MultiPeakControls from "./components/MultiPeakControls.vue";
+import MultiPeakChart from "./components/MultiPeakChart.vue";
 import FitChart from "./components/FitChart.vue";
 import FitControls from "./components/FitControls.vue";
 import DatasetSummary from "./components/DatasetSummary.vue";
@@ -25,6 +28,7 @@ vi.mock("plotly.js-dist-min", () => ({ default: {
 vi.mock("./api", () => ({
   analyzePeak: vi.fn(), compareModels: vi.fn(), downloadExport: vi.fn(),
   previewBaseline: vi.fn(), previewDataset: vi.fn(), runFit: vi.fn(), uploadDataset: vi.fn(),
+  loadDatasetRows: vi.fn().mockResolvedValue({columns:[],rows:[],row_numbers:[],total_rows:0,offset:0,limit:100}),
 }));
 
 const x = Array.from({ length: 11 }, (_, index) => index);
@@ -44,8 +48,10 @@ function chart(extra = {}) {
 function pointer(target: EventTarget, type: string, clientX: number) {
   target.dispatchEvent(new MouseEvent(type, { clientX, bubbles: true, cancelable: true }));
 }
-beforeEach(() => vi.clearAllMocks());
-afterEach(() => { mounted.splice(0).forEach((wrapper) => wrapper.unmount()); });
+beforeEach(() => {
+  Object.defineProperty(HTMLDialogElement.prototype,"showModal",{configurable:true,writable:true,value:function(){this.setAttribute("open","");}});
+  Object.defineProperty(HTMLDialogElement.prototype,"close",{configurable:true,writable:true,value:function(){this.removeAttribute("open");this.dispatchEvent(new Event("close"));}});vi.clearAllMocks();vi.spyOn(protection,"confirmDiscard").mockResolvedValue(true);});
+afterEach(() => { mounted.splice(0).forEach((wrapper) => wrapper.unmount()); vi.restoreAllMocks(); });
 
 describe("分析范围合并", () => {
   it("参数弹窗保留完整初值、边界与固定设置，关闭后不丢失修改", async () => {
@@ -73,19 +79,19 @@ describe("分析范围合并", () => {
     expect(wrapper.findAll('.parameter-row')).toHaveLength(5);
   });
   it('改模型后丢弃旧的模型比较与自动初值响应', async()=>{
-    const wrapper=track(mount(App));
+    const wrapper=await loadedApp();
     let finishComparison!:(value:any)=>void,finishAnalysis!:(value:any)=>void;
     vi.mocked(api.compareModels).mockImplementationOnce(()=>new Promise(resolve=>finishComparison=resolve));
     vi.mocked(api.analyzePeak).mockImplementationOnce(()=>new Promise(resolve=>finishAnalysis=resolve));
-    const controls=wrapper.getComponent(FitControls);
+    const controls=wrapper.getComponent(MultiPeakControls);
     wrapper.getComponent(ResultsPanel).vm.$emit('compare',true);
-    controls.vm.$emit('auto-analyze',{});
-    controls.vm.$emit('settings-change');
+    await wrapper.get('[data-test="auto-analyze"]').trigger('click');
+    controls.props('config').solver.tolerance=1e-7;
     finishComparison({active_model:'emg_high',recommended_model:'emg_high',rows:[]});
     finishAnalysis({model:'emg_high',initial_parameters:{A:3,xc:2,sigma:1,tau:2}});
     await flushPromises();
     expect(wrapper.getComponent(ResultsPanel).props('comparison')).toBeNull();
-    expect(controls.props('autoAnalysis')).toBeNull();
+    expect(controls.props('config').components[0].parameters.xc?.value).toBe(5);
   });
   it("加载数据后发布完整范围，手动修改同步到图表", async () => {
     const wrapper = track(mount(FitControls, { props: { x, y } }));
@@ -146,6 +152,8 @@ describe("分析范围合并", () => {
     const node = wrapper.get(".chart").element as any;
     node._fullLayout.xaxis.range = [start, start + 10];
     if (handle === "end") node._fullLayout.xaxis.range = [1990, 2000];
+    node.events.plotly_relayout({});
+    await flushPromises();
     pointer(wrapper.get(`[data-test="range-${handle}-handle"]`).element, "pointerdown", pointerX);
     pointer(window, "pointermove", pointerX);
     pointer(window, "pointerup", pointerX);
@@ -197,24 +205,26 @@ describe("旧拟合结果与当前设置", () => {
     const wrapper = track(mount(App));
     wrapper.getComponent(DatasetSummary).vm.$emit("upload", new File(["x,y"], "sample.csv"));
     await flushPromises();
-    const controls = wrapper.getComponent(FitControls);
-    const plot = wrapper.getComponent(FitChart);
-    expect(plot.props("analysisRange")).toEqual({ start: 0, end: 10 });
-    controls.vm.$emit("fit", (controls.vm as any).buildFitRequest());
+  await wrapper.getComponent(DatasetSummary).get('[data-test="apply-selection"]').trigger("click");await flushPromises();
+    const controls = wrapper.getComponent(MultiPeakControls);
+    const plot = wrapper.getComponent(MultiPeakChart);
+    await controls.get('[data-test="multi-add"]').trigger('click');
+    expect([plot.props("start"),plot.props("end")]).toEqual([0,10]);
+    controls.props("config").baseline.kind="none"; controls.vm.$emit("fit");
     await flushPromises();
     plot.vm.$emit("range", { start: 2, end: 8 });
     await flushPromises();
-    expect((controls.get('[data-test="range-start"]').element as HTMLInputElement).value).toBe("2");
-    expect(plot.props("result")).toEqual(result);
-    expect(plot.props("stale")).toBe(true);
+    expect((controls.get('[data-test="multi-range-start"]').element as HTMLInputElement).value).toBe("2");
+    expect(plot.props("result")).toBeNull();
+    expect(wrapper.getComponent(ResultsPanel).props("stale")).toBe(true);
     expect(wrapper.getComponent(ResultsPanel).props("result")).toEqual(result);
     wrapper.getComponent(ResultsPanel).vm.$emit("export", "curves");
     await flushPromises();
     expect(api.downloadExport).not.toHaveBeenCalled();
-    controls.vm.$emit("fit", (controls.vm as any).buildFitRequest());
+    controls.props("config").baseline.kind="none"; controls.vm.$emit("fit");
     await flushPromises();
     expect(api.runFit).toHaveBeenLastCalledWith(expect.objectContaining({ range_start: 2, range_end: 8 }));
-    expect(plot.props("stale")).toBe(false);
+    expect(wrapper.getComponent(ResultsPanel).props("stale")).toBe(false);
   });
 });
 
@@ -224,23 +234,27 @@ describe("XRD 分析模式", () => {
     vi.mocked(api.previewDataset).mockResolvedValue({ x, y });
     vi.mocked(api.runFit).mockResolvedValue(result);
     const wrapper = track(mount(App));
-    expect(wrapper.get('[data-test="analysis-mode"]').findAll("option").map(option => option.text())).toContain("XRD 单峰拟合");
+    expect(wrapper.get('[data-test="analysis-mode"]').findAll("option").map(option => option.text())).toContain("XRD 峰拟合");
     wrapper.getComponent(DatasetSummary).vm.$emit("upload", new File(["2theta,intensity"], "XRD.csv"));
     await flushPromises();
+  await wrapper.getComponent(DatasetSummary).get('[data-test="apply-selection"]').trigger("click");await flushPromises();
     await wrapper.get('[data-test="analysis-mode"]').setValue("xrd");
-    expect(wrapper.get(".workbench-grid").isVisible()).toBe(true);
-    expect(wrapper.getComponent(FitChart).props("analysisMode")).toBe("xrd");
-    expect(wrapper.getComponent(FitChart).text()).toContain("2θ（°）");
-    const controls = wrapper.getComponent(FitControls);
-    await controls.get('[data-test="range-start"]').setValue(2);
-    await controls.get('[data-test="range-end"]').setValue(8);
-    await controls.get('[data-test="fit-button"]').trigger("click");
+    expect(wrapper.get(".xps-grid").isVisible()).toBe(true);
+    expect(wrapper.getComponent(MultiPeakChart).props("mode")).toBe("xrd");
+
+    const controls = wrapper.getComponent(MultiPeakControls);
+    await controls.get('[data-test="multi-range-start"]').setValue(2);
+    await controls.get('[data-test="multi-range-end"]').setValue(8);
+    await controls.get('[data-test="multi-add"]').trigger('click');
+    controls.props('config').baseline.kind='none';
+    await nextTick();
+    await controls.get('[data-test="multi-fit"]').trigger("click");
     await flushPromises();
     expect(api.runFit).toHaveBeenLastCalledWith(expect.objectContaining({ x, y, range_start: 2, range_end: 8 }));
     expect(wrapper.getComponent(ResultsPanel).text()).toContain("峰顶 2θ（°）");
     await wrapper.get('[data-test="analysis-mode"]').setValue("single");
     await wrapper.get('[data-test="analysis-mode"]').setValue("xrd");
-    expect((controls.get('[data-test="range-start"]').element as HTMLInputElement).value).toBe("2");
+    expect((controls.get('[data-test="multi-range-start"]').element as HTMLInputElement).value).toBe("2");
     expect(wrapper.getComponent(ResultsPanel).props("result")).toEqual(result);
   });
 
@@ -273,6 +287,9 @@ async function loadedApp() {
   const wrapper = track(mount(App));
   wrapper.getComponent(DatasetSummary).vm.$emit("upload", new File(["data"], "public.xlsx"));
   await flushPromises();
+  await wrapper.getComponent(DatasetSummary).get('[data-test="apply-selection"]').trigger("click");await flushPromises();
+  wrapper.getComponent(MultiPeakControls).props("config").baseline.kind="none";
+  await wrapper.get('[data-test="multi-add"]').trigger('click');
   return wrapper;
 }
 function deferred<T>() {
@@ -294,9 +311,9 @@ describe("数据与拟合生命周期", () => {
   it("数值输入尚未失焦时也丢弃旧拟合响应", async () => {
     const wrapper = await loadedApp(), pending = deferred<FitResult>();
     vi.mocked(api.runFit).mockReturnValueOnce(pending.promise);
-    const controls = wrapper.getComponent(FitControls);
+    const controls = wrapper.getComponent(MultiPeakControls);
     controls.vm.$emit("fit", {});
-    const input = controls.get('[data-test="range-start"]');
+    const input = controls.get('[data-test="multi-range-start"]');
     (input.element as HTMLInputElement).value = "2";
     await input.trigger("input");
     pending.resolve(result); await flushPromises();
@@ -306,20 +323,20 @@ describe("数据与拟合生命周期", () => {
   it("计算期间禁用主按钮并忽略重复提交", async () => {
     const wrapper = await loadedApp(), pending = deferred<FitResult>();
     vi.mocked(api.runFit).mockReturnValueOnce(pending.promise);
-    const controls = wrapper.getComponent(FitControls);
+    const controls = wrapper.getComponent(MultiPeakControls);
     controls.vm.$emit("fit", {}); controls.vm.$emit("fit", {});
     await nextTick();
     expect(api.runFit).toHaveBeenCalledTimes(1);
-    expect(controls.get('[data-test="fit-button"]').attributes("disabled")).toBeDefined();
-    expect(controls.get('[data-test="fit-button"]').text()).toContain("拟合中");
+    expect(controls.get('[data-test="multi-fit"]').attributes("disabled")).toBeDefined();
+    expect(controls.get('[data-test="multi-fit"]').text()).toContain("处理中");
     pending.resolve(result); await flushPromises();
     expect(wrapper.getComponent(ResultsPanel).props("fitting")).toBe(false);
   });
   it("修改设置后可重新提交，旧请求结束不清除新任务状态或覆盖结果", async () => {
     const wrapper = await loadedApp(), old = deferred<FitResult>(), latest = deferred<FitResult>();
     vi.mocked(api.runFit).mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise);
-    const controls = wrapper.getComponent(FitControls);
-    controls.vm.$emit("fit", {}); controls.vm.$emit("settings-change"); controls.vm.$emit("fit", {});
+    const controls = wrapper.getComponent(MultiPeakControls);
+    controls.vm.$emit("fit", {}); controls.props("config").solver.tolerance=1e-7; controls.vm.$emit("fit", {});
     old.resolve({ ...result, message: "old" }); await flushPromises();
     expect(wrapper.getComponent(ResultsPanel).props("fitting")).toBe(true);
     expect(wrapper.getComponent(ResultsPanel).props("result")).toBeNull();
@@ -329,8 +346,8 @@ describe("数据与拟合生命周期", () => {
   it("最新结果先返回时也不会被过期结果覆盖", async () => {
     const wrapper = await loadedApp(), old = deferred<FitResult>(), latest = deferred<FitResult>();
     vi.mocked(api.runFit).mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise);
-    const controls = wrapper.getComponent(FitControls);
-    controls.vm.$emit("fit", {}); controls.vm.$emit("settings-change"); controls.vm.$emit("fit", {});
+    const controls = wrapper.getComponent(MultiPeakControls);
+    controls.vm.$emit("fit", {}); controls.props("config").solver.tolerance=1e-7; controls.vm.$emit("fit", {});
     latest.resolve(result); await flushPromises(); old.resolve({ ...result, message: "old" }); await flushPromises();
     expect(wrapper.getComponent(ResultsPanel).props("result")).toEqual(result);
     expect(wrapper.getComponent(ResultsPanel).props("stale")).toBe(false);
@@ -338,13 +355,14 @@ describe("数据与拟合生命周期", () => {
   it("更换数据后丢弃旧拟合错误", async () => {
     const wrapper = await loadedApp(), old = deferred<FitResult>();
     vi.mocked(api.runFit).mockReturnValueOnce(old.promise);
-    wrapper.getComponent(FitControls).vm.$emit("fit", {});
+    wrapper.getComponent(MultiPeakControls).vm.$emit("fit", {});
     vi.mocked(api.uploadDataset).mockResolvedValueOnce({ ...workbook, dataset_id: "new" });
     wrapper.getComponent(DatasetSummary).vm.$emit("upload", new File(["new"], "new.xlsx"));
-    await flushPromises(); old.reject(new Error("old failure")); await flushPromises();
-    expect(wrapper.getComponent(ResultsPanel).props("error")).toBe("");
-    expect(wrapper.getComponent(ResultsPanel).props("result")).toBeNull();
-    expect(wrapper.getComponent(ResultsPanel).props("fitting")).toBe(false);
+    await flushPromises();await wrapper.getComponent(DatasetSummary).get('[data-test="apply-selection"]').trigger("click");await flushPromises(); old.reject(new Error("old failure")); await flushPromises();
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.getComponent(MultiPeakControls).props('config').components).toHaveLength(0);
+    expect(wrapper.getComponent(MultiPeakControls).props('busy')).toBe(false);
+    expect(wrapper.text()).toContain('暂无拟合结果');
   });
   it("草稿不改变已应用摘要，取消恢复当前选择，成功后原子更新", async () => {
     const wrapper = await loadedApp(), data = wrapper.getComponent(DatasetSummary);
@@ -357,17 +375,17 @@ describe("数据与拟合生命周期", () => {
     const pending = deferred<{x:number[];y:number[]}>();
     vi.mocked(api.previewDataset).mockReturnValueOnce(pending.promise);
     await data.get('[data-test="apply-selection"]').trigger("click");
-    expect(wrapper.getComponent(FitChart).props("x")).toEqual(x);
+    expect(wrapper.getComponent(MultiPeakChart).props("x")).toEqual(x);
     expect(data.get(".dataset-file").text()).toContain("first");
     pending.resolve({x:[2,3,4,5],y:[1,3,2,1]}); await flushPromises();
     expect(data.get(".dataset-file").text()).toContain("second");
-    expect(wrapper.getComponent(FitChart).props("x")).toEqual([2,3,4,5]);
+    expect(wrapper.getComponent(MultiPeakChart).props("x")).toEqual([2,3,4,5]);
   });
   it("列预览失败保留当前数据并显示可重试错误", async () => {
     const wrapper = await loadedApp(), data = wrapper.getComponent(DatasetSummary);
     vi.mocked(api.previewDataset).mockRejectedValueOnce(new Error("所选列没有有效配对"));
     data.vm.$emit("preview", {sheet:"second",xColumn:"x",yColumn:"y"}); await flushPromises();
-    expect(wrapper.getComponent(FitChart).props("x")).toEqual(x);
+    expect(wrapper.getComponent(MultiPeakChart).props("x")).toEqual(x);
     expect(data.get(".dataset-file").text()).toContain("first");
     expect(data.get('[role="alert"]').text()).toContain("所选列没有有效配对");
   });
@@ -393,7 +411,7 @@ describe("数据与拟合生命周期", () => {
     data.vm.$emit("upload",new File(["bad"],"bad.xlsx")); await flushPromises();
     expect(data.get('[role="alert"]').text()).toContain("文件损坏");
     expect(data.get('[role="alert"]').text()).toContain("public.xlsx");
-    expect(wrapper.getComponent(FitChart).props("x")).toEqual(x);
+    expect(wrapper.getComponent(MultiPeakChart).props("x")).toEqual(x);
   });
   it("页签方向键移动焦点并同步关联面板", async () => {
     const wrapper = track(mount(FitControls,{props:{x,y},attachTo:document.body}));

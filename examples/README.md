@@ -10,3 +10,8 @@
 单峰扰动为 `0.08 sin(7x) + 0.04 cos(13x)`；XPS 扰动为 `0.10 sin(5(E−280))`。这些确定性扰动用于观察非零残差，不模拟特定仪器的噪声分布。峰面积参数为全域积分面积，不能用有限区间数值积分要求严格相等。
 
 两个 CSV 均使用 UTF-8、逗号分隔和首行列名。
+
+
+## 多峰与连续谱示例
+
+`multipeak_sequence_demo.csv` 包含 20 条独立解析生成的双高斯谱。`multipeak_demo_configuration.json` 为首谱配置，可在通用多峰工作区恢复。使用 `reproduce_multipeak.py` 重建文件并验证首谱拟合；完整步骤见 [多峰与批量教程](../docs/USER_GUIDE.md#通用多峰与批量顺序拟合)。

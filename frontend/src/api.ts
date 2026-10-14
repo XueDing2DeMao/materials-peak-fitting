@@ -15,7 +15,11 @@ export function uploadDataset(file: File): Promise<DatasetInfo> {
   const form = new FormData(); form.append("file", file);
   return request("/api/datasets", { method: "POST", body: form });
 }
-export function previewDataset(datasetId: string, sheet: string, xColumn: string, yColumn: string): Promise<{ x: number[]; y: number[] }> {
+export function loadDatasetRows(datasetId:string,sheet:string,offset=0,limit=100):Promise<import('./datasetRows').DatasetRows>{
+  const params=new URLSearchParams({sheet,offset:String(offset),limit:String(limit)});
+  return request(`/api/datasets/${encodeURIComponent(datasetId)}/rows?${params}`,{method:'GET'});
+}
+export function previewDataset(datasetId: string, sheet: string, xColumn: string, yColumn: string): Promise<import('./datasetAudit').AuditedPreview> {
   return request("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataset_id: datasetId, sheet, x_column: xColumn, y_column: yColumn }) });
 }
 export function runFit(payload: FitRequest): Promise<FitResult> {

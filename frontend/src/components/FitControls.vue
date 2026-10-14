@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { suggestBaselineAnchors } from '../baselineSuggestions';
 import { computed, nextTick, ref, watch } from "vue";
 import { MODEL_GROUPS, PEAK_MODEL_PARAMETERS, PARAMETER_LABELS, type PeakParameterName, peakModelInfo } from "../peakModels";
 import type { Anchor, AutoPeakAnalysis, BaselineKind, FitRequest, PeakModel } from "../types";
@@ -148,41 +149,7 @@ const fitBlockedMessage = computed(() => {
   return "";
 });
 
-function suggestedAnchors(count: number): Anchor[] {
-  const points = props.x.map((x, index) => ({ x, y: props.y[index] ?? 0 }))
-    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= rangeStart.value && point.x <= rangeEnd.value)
-    .sort((left, right) => left.x - right.x);
-  const requestedCount = Math.min(count, points.length);
-  if (!points.length || requestedCount <= 0) return [];
-  const window = Math.max(1, Math.ceil(points.length * 0.05));
-  const median = (values: number[]): number => {
-    const ordered = [...values].sort((left, right) => left - right);
-    return ordered[Math.floor(ordered.length / 2)] ?? 0;
-  };
-  const endpointAnchors = [
-    { x: points[0].x, y: median(points.slice(0, window).map((point) => point.y)) },
-    { x: points.at(-1)!.x, y: median(points.slice(-window).map((point) => point.y)) },
-  ];
-  if (requestedCount <= 2) return endpointAnchors.slice(0, requestedCount);
-  const peakIndex = points.reduce((best, point, index) => point.y > points[best].y ? index : best, 0);
-  const exclusion = Math.max(1, Math.ceil(points.length * 0.1));
-  const background = points.filter((_, index) => index > 0 && index < points.length - 1 && Math.abs(index - peakIndex) > exclusion);
-  const interiorCount = requestedCount - 2;
-  const interior = Array.from({ length: interiorCount }, (_, index) => {
-    const target = Math.round((index + 1) * (background.length - 1) / (interiorCount + 1));
-    const radius = Math.max(1, Math.ceil(background.length / Math.max(24, interiorCount * 8)));
-    const candidates = background.slice(Math.max(0, target - radius), target + radius + 1);
-    const targetPoint = background[target] ?? candidates[0] ?? points[peakIndex];
-    const targetY = median(candidates.map((point) => point.y));
-    return candidates.reduce((best, point) => {
-      const bestDistance = Math.abs(best.y - targetY);
-      const pointDistance = Math.abs(point.y - targetY);
-      if (pointDistance !== bestDistance) return pointDistance < bestDistance ? point : best;
-      return Math.abs(point.x - targetPoint.x) < Math.abs(best.x - targetPoint.x) ? point : best;
-    }, candidates[0] ?? points[peakIndex]);
-  });
-  return [...endpointAnchors, ...interior].sort((left, right) => left.x - right.x);
-}
+function suggestedAnchors(count:number):Anchor[]{return suggestBaselineAnchors(props.x,props.y,rangeStart.value,rangeEnd.value,count);}
 
 function addAnchor(point?: Anchor): void {
   const suggestions = suggestedAnchors(Math.max(requiredAnchors.value, anchors.value.length + 1));
@@ -313,7 +280,11 @@ defineExpose({ addAnchor, buildFitRequest, setAnalysisRange, focusRangeEndpoint 
               <summary>锚点精调<span>可选</span></summary>
               <div class="anchor-actions"><button v-if="baselineKind !== 'line' && x.length" data-test="suggest-anchors" type="button" @click="generateSuggestedAnchors">{{ anchors.length ? `重置为 ${recommendedAnchorCount} 个建议锚点` : `生成 ${recommendedAnchorCount} 个建议锚点` }}</button><button data-test="add-anchor" type="button" @click="addAnchor()">添加</button><button v-if="anchors.length" data-test="clear-anchors" type="button" @click="clearAnchors">清除全部</button></div>
               <p class="hint">锚点应取自背景区，编号对应图中标记；自动建议仍需复核。</p>
-              <label v-if="anchorSource === 'suggested'" class="review-toggle"><input v-model="baselineConfirmed" data-test="confirm-suggested-anchors" type="checkbox" @change="confirmSuggestedAnchors" />我已复核建议锚点</label>
+              <div v-if="anchorSource === 'suggested'" class="confirmation-callout" :class="{'is-confirmed':baselineConfirmed}">
+                <strong class="confirmation-status">{{baselineConfirmed?'✓ 已确认':'! 拟合前请勾选确认'}}</strong>
+                <label class="review-toggle"><input v-model="baselineConfirmed" data-test="confirm-suggested-anchors" type="checkbox" aria-describedby="suggested-review-hint" @change="confirmSuggestedAnchors" />我已复核建议锚点</label>
+                <p id="suggested-review-hint" class="confirmation-hint">{{baselineConfirmed?'建议锚点已复核。':'请检查建议锚点与基线，勾选后才能继续拟合。'}}</p>
+              </div>
               <div v-if="orderedAnchors.length" class="anchor-grid-head" aria-hidden="true"><span>序号</span><span>X</span><span>Y</span><span/></div>
               <div v-for="item in orderedAnchors" :key="item.sourceIndex" data-test="anchor-row" class="anchor-row" :class="{ 'has-duplicate': item.duplicateOf }"><span data-test="anchor-number" class="anchor-number">{{ item.number }}</span><input v-model.number="item.anchor.x" data-test="anchor-x" :aria-label="`锚点 ${item.number} X`" type="number" step="any" @input="markAnchorsAsManual" /><input v-model.number="item.anchor.y" data-test="anchor-y" :aria-label="`锚点 ${item.number} Y`" type="number" step="any" @input="markAnchorsAsManual" /><button type="button" :aria-label="`删除锚点 ${item.number}`" @click="removeAnchor(item.sourceIndex)">×</button><p v-if="item.duplicateOf" data-test="duplicate-anchor-warning" class="anchor-duplicate">锚点 {{ item.duplicateOf }} 和 {{ item.number }} 的 X 坐标重合，不计为独立约束。</p></div>
             </details>

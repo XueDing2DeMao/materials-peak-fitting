@@ -12,5 +12,6 @@ async function post(path:string,payload:unknown):Promise<Response> {
 }
 export async function fitXps(request:XpsRequest):Promise<XpsResult>{return (await post("fit",request)).json();}
 export async function previewXps(request:XpsRequest):Promise<XpsPreview>{return (await post("background-preview",request)).json();}
+export async function validateXpsInput(request:XpsRequest):Promise<XpsPreview>{return (await post("validate",request)).json();}
 export async function candidatesXps(request:XpsRequest):Promise<{candidates:Candidate[];note:string}>{return (await post("candidates",request)).json();}
 export async function exportXps(kind:"curves"|"parameters"|"configuration",request:XpsRequest):Promise<Blob>{return (await post("export",{kind,request})).blob();}

@@ -11,6 +11,7 @@ from .xps_backgrounds import preview_background
 from .xps_fitting import fit_xps, suggest_candidates
 from .xps_schemas import StrictModel, XpsRequest
 from .peak_properties import geometry_rows
+from .multipeak_core import validate_components
 
 router = APIRouter(prefix="/api/xps", tags=["XPS"])
 
@@ -28,6 +29,15 @@ def checked(function, request):
 @router.post("/background-preview")
 def background_preview(request: XpsRequest):
     return checked(preview_background, request)
+
+
+@router.post('/validate')
+def validate_input(request: XpsRequest):
+    def validate(r):
+        preview=preview_background(r)
+        validate_components(r,preview)
+        return preview
+    return checked(validate, request)
 
 
 @router.post("/fit")
