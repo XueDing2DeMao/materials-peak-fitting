@@ -1,0 +1,71 @@
+<script setup lang="ts">
+import {computed,ref,watch} from 'vue';
+import type {NormalizedAnalysis,PeakMapping,ResultUpload,CalculationHistory} from '../peakRecordTypes';
+import {uploadPeakResults,loadPeakRows,normalizePeakResults} from '../peakResultImportApi';
+import {clonePeak,mappingTemplate,readMappingTemplate,applyMappingTemplate,mergeAnalyses} from '../peakResultImportState';
+import {createPeakWorkspace,invalidateCalculations,readPeakArchive,writePeakArchive,validateAnalysis} from '../peakAnalysisArchive';
+import {peakRows,calculationRows,issueRows,peakAnalysisReport} from '../peakAnalysisExport';
+import {csv,saveFile} from '../resultExport';
+import {confirmDiscard} from '../useWorkProtection';
+import DatasetTable from './DatasetTable.vue';
+import PeakFieldMapping from './PeakFieldMapping.vue';
+import PeakRecordTable from './PeakRecordTable.vue';
+import DerivedCalculationPanel from './DerivedCalculationPanel.vue';
+import '../styles/peakAnalysis.css';
+const props=defineProps<{initialAnalysis?:NormalizedAnalysis|null}>();
+const emit=defineEmits<{work:[value:boolean];activity:[value:boolean]}>();
+const workspace=ref(createPeakWorkspace());
+interface Draft {upload:ResultUpload;mapping:PeakMapping;error:string;appliedIds:string[]}
+const drafts=ref<Draft[]>([]),active=ref(''),busy=ref(false),calculating=ref(false),error=ref(''),message=ref(''),tab=ref<'import'|'records'|'calculate'|'export'>('import');
+const templateName=ref('我的映射'),templateIndex=ref(-1),browserOpen=ref(false);
+const archiveInput=ref<HTMLInputElement|null>(null),templateInput=ref<HTMLInputElement|null>(null);
+const current=computed(()=>drafts.value.find(d=>d.upload.upload_id===active.value));
+const currentSheet=computed(()=>{const d=current.value,s=d?.upload.sheets.find(s=>s.name===d.mapping.sheet);return s?{name:s.name,columns:s.columns,numeric_columns:s.columns,row_count:s.row_count,preview_rows:[]}:null;});
+const hasWork=computed(()=>Boolean(drafts.value.length||workspace.value.analysis?.records.length||workspace.value.calculations.length||workspace.value.revision||workspace.value.templates.length||workspace.value.note));
+const occupied=computed(()=>busy.value||calculating.value);
+watch(hasWork,v=>emit('work',v),{immediate:true});watch(occupied,v=>emit('activity',v),{immediate:true});
+function changed(reason='字段映射或输入已修改'){invalidateCalculations(workspace.value,reason);message.value='';}
+async function loadAnalysis(a:NormalizedAnalysis){if(occupied.value)return;validateAnalysis(a);if(!await confirmDiscard(hasWork.value,'载入这批内部拟合参数将替换当前解析工作区和计算历史；原谱拟合工作区保留。'))return;const templates=workspace.value.templates;workspace.value=createPeakWorkspace();workspace.value.templates=templates;workspace.value.analysis=clonePeak(a);drafts.value=[];tab.value='records';message.value='已载入保存的拟合参数；未重新拟合或计算。';}
+function appendAnalysis(a:NormalizedAnalysis){if(occupied.value)throw new Error('请等待当前操作结束');validateAnalysis(a);changed('纳入新的峰参数');workspace.value.analysis=mergeAnalyses(workspace.value.analysis,a);tab.value='records';}
+watch(()=>props.initialAnalysis,a=>{if(a)void loadAnalysis(a).catch(e=>{error.value=`参数载入失败，当前结果保留：${e instanceof Error?e.message:String(e)}`;});},{immediate:true});
+function revised(a:NormalizedAnalysis){changed('字段单位或数量定义已重新声明');workspace.value.analysis=a;}
+async function upload(event:Event){const input=event.target as HTMLInputElement,files=Array.from(input.files??[]);input.value='';if(!files.length||occupied.value)return;busy.value=true;error.value='';message.value='';let added=0;
+ try{for(const file of files){try{const u=await uploadPeakResults(file);drafts.value.push({upload:u,mapping:clonePeak(u.suggested_mapping),error:'',appliedIds:[]});active.value=u.upload_id;added++;}catch(e){error.value+=[file.name,(e as Error).message].join('：')+'；';}}message.value=`已读取 ${added} 个文件，请确认字段、单位与定义后纳入。`;tab.value='import';}finally{busy.value=false;}}
+async function refresh(){const d=current.value;if(!d||occupied.value)return;busy.value=true;d.error='';try{const p=await loadPeakRows(d.upload.upload_id,d.mapping.sheet,0,100,d.mapping.header_row);const s=d.upload.sheets.find(s=>s.name===d.mapping.sheet)!;s.columns=p.columns;s.preview_rows=p.rows;s.row_numbers=p.row_numbers;s.row_count=p.total_rows;browserOpen.value=true;}catch(e){d.error=(e as Error).message;}finally{busy.value=false;}}
+async function rows(id:string,sheet:string,offset:number,limit:number){return loadPeakRows(id,sheet,offset,limit,current.value?.mapping.header_row??1);}
+async function normalize(all=false){if(occupied.value)return;const targets=all?drafts.value:current.value?[current.value]:[];busy.value=true;error.value='';message.value='';let count=0;
+ try{for(const d of targets){d.error='';try{const mapping=clonePeak(d.mapping);for(const k of ['data_start_row','data_end_row']as const)if((mapping[k]as unknown)==='')mapping[k]=null;
+   const a=await normalizePeakResults(d.upload.upload_id,mapping);validateAnalysis(a);changed('峰参数已重新解析');if(workspace.value.analysis&&d.appliedIds.length){const previous=new Set(d.appliedIds);const oldSources=workspace.value.analysis.records.filter(r=>previous.has(r.id)).map(r=>r.source);workspace.value.analysis.issues=workspace.value.analysis.issues.filter(i=>!(i.record_id&&previous.has(i.record_id))&&!oldSources.some(source=>i.source_sha256===source.file_sha256&&i.source_sheet===source.sheet));workspace.value.analysis.records=workspace.value.analysis.records.filter(r=>!previous.has(r.id));const spectrumIds=new Set(workspace.value.analysis.records.map(r=>r.spectrum_id));workspace.value.analysis.spectra=workspace.value.analysis.spectra.filter(s=>spectrumIds.has(s.id));}
+   workspace.value.analysis=mergeAnalyses(workspace.value.analysis,a);d.appliedIds=a.records.map(r=>r.id);if(a.mapping)d.mapping=clonePeak(a.mapping);count+=a.records.length;
+  }catch(e){d.error=(e as Error).message;}}
+  message.value=`本次纳入 ${count} 条峰记录${targets.some(d=>d.error)?'；部分文件未纳入，请查看文件旁的错误。':'。'}`;if(count)tab.value='records';
+ }finally{busy.value=false;}}
+function saveTemplate(){if(!current.value)return;workspace.value.templates.push(mappingTemplate(templateName.value,current.value.mapping));templateIndex.value=workspace.value.templates.length-1;message.value='映射模板已保存在当前工作区，完整档案会包含模板。';}
+function applyTemplate(all=false){const t=workspace.value.templates[templateIndex.value];if(!t)return;const targets=all?drafts.value:current.value?[current.value]:[];let count=0;for(const d of targets){const s=d.upload.sheets.find(s=>s.name===d.mapping.sheet);if(!s)continue;const check=applyMappingTemplate(t,s.columns);if(check.missing.length){d.error=`模板缺少列：${check.missing.join('、')}。原映射保留。`;continue;}d.mapping={...check.mapping,sheet:d.mapping.sheet};d.error='';count++;}changed('应用了字段映射模板');message.value=`已应用到 ${count} 个文件；请复核数量定义后解析。`;}
+function clearFingerprint(){if(current.value){delete current.value.mapping.fingerprint;current.value.error='';changed('解除模板指纹后重新映射');message.value='已解除模板指纹；请逐项复核字段、单位和定义再解析。';}}
+function exportTemplate(){const t=workspace.value.templates[templateIndex.value];if(t)saveFile('peak-mapping.json',JSON.stringify(t,null,2),'application/json');}
+async function importTemplate(event:Event){const input=event.target as HTMLInputElement,f=input.files?.[0];input.value='';if(!f)return;try{const t=readMappingTemplate(await f.text());workspace.value.templates.push(t);templateIndex.value=workspace.value.templates.length-1;message.value='模板已载入，请应用并复核。';}catch(e){error.value=(e as Error).message;}}
+async function restore(event:Event){const input=event.target as HTMLInputElement,f=input.files?.[0];input.value='';if(!f||occupied.value)return;try{const a=readPeakArchive(await f.text());if(!await confirmDiscard(hasWork.value,'恢复解析档案将替换当前峰参数、映射模板及计算历史，不会重新拟合或计算。'))return;workspace.value=a.workspace;drafts.value=[];tab.value='records';message.value='解析档案已恢复；使用保存结果，未自动重算。重新映射时请再次提供原文件。';}catch(e){error.value=`载入失败，当前结果保留：${(e as Error).message}`;}}
+function saveArchive(){try{saveFile('peak-analysis-v1.json',writePeakArchive(workspace.value),'application/json');message.value='已生成完整解析档案，请保存下载文件。';}catch(e){error.value=(e as Error).message;}}
+function calculated(h:CalculationHistory){workspace.value.calculations.push(h);message.value='已保存本次计算快照。';}
+function download(kind:string){const a=workspace.value.analysis;if(!a)return;if(kind==='peaks')saveFile('standard-peak-records.csv',csv(peakRows(a)));else if(kind==='calculations')saveFile('derived-calculations.csv',csv(calculationRows(workspace.value.calculations)));else if(kind==='issues')saveFile('peak-import-issues.csv',csv(issueRows(a)));else saveFile('peak-analysis-report.html',peakAnalysisReport(workspace.value),'text/html;charset=utf-8');}
+defineExpose({appendAnalysis,loadAnalysis,isBusy:()=>occupied.value});
+</script>
+<template>
+ <main class="peak-analysis-workbench" aria-label="拟合结果解析与材料参数计算">
+  <header class="peak-analysis-header"><div><span class="section-kicker">参数解析 · 材料计算</span><h2>从拟合结果到材料参数</h2><p class="hint">接收 CSV、文本和 Excel 峰表，或使用原谱工作区的拟合结果。不需要附带原谱。</p></div><div class="peak-inline-actions"><button :disabled="occupied" @click="archiveInput?.click()">恢复解析档案</button><button :disabled="occupied||!hasWork" @click="saveArchive">保存完整档案</button><input ref="archiveInput" type="file" accept=".json" hidden @change="restore" /></div></header>
+  <nav class="peak-analysis-nav" aria-label="解析流程"><button v-for="(label,id) in {import:'1 导入与映射',records:'2 峰参数与异常',calculate:'3 材料参数',export:'4 导出与归档'}" :key="id" :class="{active:tab===id}" :aria-current="tab===id?'step':undefined" @click="tab=id">{{label}}</button></nav>
+  <p v-if="error" role="alert" class="error">{{error}}</p><p v-if="message" role="status" class="peak-status">{{message}}</p>
+  <section v-show="tab==='import'" class="panel peak-import-panel"><div class="peak-section-heading"><div><h3>导入峰参数文件</h3><p class="hint">先浏览原始表，再确认每个字段的含义。多文件逐个解析，失败文件不影响其他文件。</p></div><label class="peak-file-button">{{busy?'正在处理…':'选择文件（可多选）'}}<input type="file" multiple accept=".csv,.txt,.tsv,.dat,.xls,.xlsx,.xlsm" :disabled="occupied" @change="upload" /></label></div>
+   <div v-if="drafts.length" class="peak-import-layout"><aside class="peak-source-list"><button v-for="d in drafts" :key="d.upload.upload_id" :aria-pressed="active===d.upload.upload_id" @click="active=d.upload.upload_id;browserOpen=false"><strong>{{d.upload.filename}}</strong><small>{{d.appliedIds.length?`已纳入 ${d.appliedIds.length} 峰`:'待映射'}}{{d.error?' · 有错误':''}}</small></button></aside><div v-if="current" class="peak-map-body"><div class="peak-section-heading"><h4>{{current.upload.filename}}</h4><button @click="browserOpen=!browserOpen">{{browserOpen?'收起原始表':'浏览完整原始表'}}</button></div><p class="hint peak-hash">SHA-256 {{current.upload.file_sha256}}</p><DatasetTable v-if="browserOpen" :key="`${active}-${current.mapping.header_row}-${current.mapping.sheet}`" :dataset-id="current.upload.upload_id" :sheet="currentSheet" :load="rows" />
+    <PeakFieldMapping v-model="current.mapping" :upload="current.upload" :disabled="occupied" @change="changed()" @refresh="refresh" />
+    <p v-if="current.error" role="alert" class="error">{{current.error}} <button v-if="current.mapping.fingerprint" @click="clearFingerprint">解除模板指纹并重新复核</button></p>
+    <details class="peak-detail"><summary>保存与应用字段映射模板</summary><div class="peak-form-grid"><label>模板名称<input v-model="templateName" /></label><button :disabled="occupied" @click="saveTemplate">保存当前映射</button><label>已保存模板<select v-model.number="templateIndex"><option :value="-1">请选择</option><option v-for="(t,i) in workspace.templates" :key="i" :value="i">{{t.name}}</option></select></label></div><div class="peak-inline-actions"><button :disabled="templateIndex<0||occupied" @click="applyTemplate(false)">应用到当前文件</button><button :disabled="templateIndex<0||occupied" @click="applyTemplate(true)">应用到全部文件</button><button :disabled="templateIndex<0" @click="exportTemplate">导出模板</button><button @click="templateInput?.click()">载入模板</button><input ref="templateInput" type="file" accept=".json" hidden @change="importTemplate" /></div></details>
+    <div class="peak-inline-actions peak-primary-actions"><button :disabled="occupied" @click="normalize(false)">解析当前文件</button><button class="primary" :disabled="occupied" @click="normalize(true)">{{occupied?'处理中…':`解析并纳入 ${drafts.length} 个文件`}}</button></div>
+   </div></div><p v-else class="peak-empty">选择一份包含峰位、宽度、峰高、面积或误差的结果表。单行峰表也可使用。</p>
+  </section>
+  <section v-show="tab==='records'" class="panel"><PeakRecordTable v-if="workspace.analysis" :analysis="workspace.analysis" @revised="revised" /><p v-else class="peak-empty">先导入峰参数，或从原谱拟合结果进入。</p><details v-if="workspace.analysis?.issues.length" open class="peak-detail"><summary>解析异常与待复核项（{{workspace.analysis.issues.length}}）</summary><ul><li v-for="(i,n) in workspace.analysis.issues" :key="n">{{i.severity==='error'?'错误':'提示'}} · {{i.message}} <small>{{i.source_file??''}} {{i.source_sheet??''}} {{i.code}} {{i.row?`第 ${i.row} 行`:''}} {{i.column??''}}</small></li></ul></details><button v-if="workspace.analysis?.records.length" class="primary" @click="tab='calculate'">选择公式与材料参数</button></section>
+  <section v-show="tab==='calculate'" class="panel"><DerivedCalculationPanel v-model="workspace.formulaDraft" :records="workspace.analysis?.records??[]" :history="workspace.calculations" @change="changed('公式、输入或计算范围已修改')" @calculated="calculated" @activity="calculating=$event" /></section>
+  <section v-show="tab==='export'" class="panel"><h3>导出与归档</h3><p class="hint">导出已有快照，不重新计算。完整档案包含峰参数、原值来源、映射模板、公式、输入和历史；原始文件仍请另行保存。</p><label>分析备注<textarea v-model="workspace.note" rows="3" /></label><div class="peak-export-grid"><button :disabled="!workspace.analysis" @click="download('peaks')">标准峰参数 CSV</button><button :disabled="!workspace.calculations.length" @click="download('calculations')">二次计算结果 CSV</button><button :disabled="!workspace.analysis" @click="download('issues')">异常记录 CSV</button><button :disabled="!workspace.analysis" @click="download('report')">可打印 HTML 摘要</button><button class="primary" :disabled="!hasWork||occupied" @click="saveArchive">保存完整解析档案 JSON</button></div><p class="hint">恢复档案不自动重算。修改映射、参数或公式后，既有结果标为失效并保留历史。未保存的工作在关闭网页后不会保留。</p></section>
+ </main>
+</template>

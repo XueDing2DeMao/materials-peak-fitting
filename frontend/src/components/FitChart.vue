@@ -140,6 +140,7 @@ defineExpose({ downloadImage });
 
     <AnalysisRangeToolbar v-if="x.length" :range="displayedRange" :range-editing="rangeEditing" :selection-mode="selectionMode" @edit="toggleRangeEditing" @select="toggleRangeSelection" />
     <div v-if="result && peakModelInfo(result.model)" class="chart-model-readout"><span v-if="peakWidthReadout(result)">{{ peakWidthReadout(result) }}</span><span>拟合区间 {{ result.range_start }} — {{ result.range_end }}</span><em v-if="stale" class="stale-curve-badge">上一次拟合 · 已过期</em></div>
+    <p v-if="selectionMode" data-test="range-selection-guide" class="range-selection-guide" role="status">框选分析区间：水平拖动，松开后更新区间。</p>
     <div class="chart-canvas">
       <div ref="chart" class="chart" @dblclick="restoreRangeControls"/>
       <AnalysisRangeOverlay :geometry="rangeOverlay" :range="displayedRange" :range-editing="rangeEditing" :selection-mode="selectionMode" :reversed="reversed" :start-visible="startVisible" :end-visible="endVisible" @drag="beginRangeDrag" />

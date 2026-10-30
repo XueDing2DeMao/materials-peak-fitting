@@ -1,0 +1,6 @@
+Sample,Spectrum,Peak,Model,Parameter,Value,Unit,SE,Scope
+synthetic-ftir,scan-1,band-1,Gaussian,Center,1050,cm^-1,0.1,peak
+synthetic-ftir,scan-1,band-1,Gaussian,FWHM,20,cm^-1,0.2,peak
+synthetic-ftir,scan-1,band-1,Gaussian,Height,0.3288030461,a.u.,,peak
+synthetic-ftir,scan-1,band-1,Gaussian,Area,7,a.u.*cm^-1,,peak
+synthetic-ftir,scan-1,,Gaussian,RMSE,0.001,a.u.,,spectrum

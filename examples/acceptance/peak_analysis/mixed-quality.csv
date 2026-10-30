@@ -1,0 +1,3 @@
+Sample,Spectrum,Peak,Model,Center,FWHM,Height,Area,RMSE
+synthetic-good,scan-1,p1,Gaussian,60,0.2,100,21.2893403886,0.1
+synthetic-bad,scan-2,p1,Gaussian,bad,-1,100,,0.2

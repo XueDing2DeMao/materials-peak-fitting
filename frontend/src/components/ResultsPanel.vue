@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import FitReviewActions from "./FitReviewActions.vue";
+import PeakDiagnosticLinks from "./PeakDiagnosticLinks.vue";
+import PeakQuickSummary from "./PeakQuickSummary.vue";
 import { computed, ref } from "vue";
 import PeakResultTable from './PeakResultTable.vue';
 import SamplingDiagnostics from './SamplingDiagnostics.vue';
@@ -8,8 +11,8 @@ import PeakGeometryPanel from "./PeakGeometryPanel.vue";
 import { overallWidthText } from "../peakGeometry";
 import { peakModelInfo } from "../peakModels";
 import type { FitResult, ModelComparison } from "../types";
-const props = defineProps<{ result: FitResult | null; comparison?: ModelComparison | null; error?: string; fitting?: boolean; comparing?: boolean; stale?: boolean; selectedPeak?:string;peakId?:string;peakLabel?:string;analysisMode?: "single" | "xrd" }>();
-const emit = defineEmits<{ export: [kind: "curves" | "parameters"]; "export-image": []; select:[id:string];compare: [includeAsymmetric:boolean] }>();
+const props = defineProps<{locatable?:boolean; result: FitResult | null; comparison?: ModelComparison | null; error?: string; fitting?: boolean; comparing?: boolean; stale?: boolean; selectedPeak?:string;peakId?:string;peakLabel?:string;analysisMode?: "single" | "xrd" }>();
+const emit = defineEmits<{navigate:[target:'baseline'|'peaks'|'chart'|'diagnostics'];locate:[id:string,parameter:string]; export: [kind: "curves" | "parameters"]; "export-image": []; select:[id:string];compare: [includeAsymmetric:boolean] }>();
 const includeAsymmetric=ref(false);
 function number(value: number | null | undefined): string { return value == null || !Number.isFinite(value) ? "—" : value.toPrecision(6); }
 const xUnit = computed(() => props.analysisMode === "xrd" ? "°" : "X 单位");
@@ -67,31 +70,31 @@ function derivedParameterMeaning(name: string): string {
       <template v-if="result">
         <p v-if="stale" data-test="stale-result-notice" class="stale-result" role="status"><strong>设置已变更，以下为上一次拟合。</strong> 重新拟合后可导出。</p>
         <p class="result-context"><strong>{{ peakModelInfo(result.model)?.label ?? result.model ?? '峰模型' }}</strong><span v-if="result.statistics.points">{{ result.statistics.points }} 个数据点</span></p>
-        <PeakResultTable :peaks="peaks" :unit="xUnit" :stale="stale" :selected-peak="selectedPeak" @select="emit('select',$event)" />
-        <SamplingDiagnostics :x="result.x" :peaks="peaks" :unit="xUnit" :xrd="analysisMode==='xrd'" />
         <p class="result-diagnostic-state" role="status">计算：{{diagnosis.calculation}} · 诊断：{{diagnosis.diagnostic}} · 人工状态：{{diagnosis.review}}</p>
-        <details class="result-details"><summary>计算口径</summary><p v-for="note in diagnosis.notes" :key="note" class="hint">{{note}}</p></details>
+        <details data-result-section="diagnostics" class="result-details"><summary>计算口径</summary><p v-for="note in diagnosis.notes" :key="note" class="hint">{{note}}</p></details>
         <div class="result-quality" aria-label="拟合质量摘要">
           <div><span>R²（扣背景信号）</span><strong>{{ number(result.statistics.r_squared) }}</strong></div>
           <div><span>RMSE</span><strong>{{ number(result.statistics.rmse) }}</strong></div>
         </div>
         <p class="result-quality-note">收敛不等于模型适用。{{ trendMessage }}</p>
-        <div v-if="resultWarnings.length || !result.converged" data-test="result-alerts" class="result-alerts" role="status">
+        <div v-if="resultWarnings.length || !result.converged" data-result-section="diagnostics" data-test="result-alerts" class="result-alerts" role="status">
           <strong>需要复核</strong>
           <p v-if="!result.converged">本次拟合未收敛，请检查区间、初值与参数约束。</p>
           <p v-for="warning in resultWarnings" :key="warning">{{ warning }}</p>
         </div>
+        <FitReviewActions v-if="locatable" :result="result" :stale="stale" :busy="fitting" @navigate="emit('navigate',$event)" /><PeakDiagnosticLinks v-if="locatable" :busy="fitting" :peaks="peaks" :stale="stale" @locate="(id,parameter)=>emit('locate',id,parameter)" /><PeakQuickSummary :busy="fitting" v-if="locatable" :peaks="peaks" :unit="xUnit" :stale="stale" :selected-peak="selectedPeak" @select="emit('locate',$event,'')" /><div data-result-section="results"><PeakResultTable :peaks="peaks" :unit="xUnit" :stale="stale" :selected-peak="selectedPeak" @select="emit('select',$event)" /></div>
+        <SamplingDiagnostics data-result-section="diagnostics" :x="result.x" :peaks="peaks" :unit="xUnit" :xrd="analysisMode==='xrd'" />
         <p v-if="!result.peak_geometry" class="hint">连续峰性质尚未计算，峰顶位置和整体 FWHM 为 —，请重新拟合。</p>
-        <details class="result-details">
+        <details data-result-section="diagnostics" class="result-details">
           <summary>峰参数与置信区间</summary>
           <table class="parameter-results"><tbody><tr v-for="(parameter, name) in result.parameters" :key="name"><th><span>{{ name }}</span><small v-if="parameterMeaning[String(name)]">{{ parameterMeaning[String(name)] }}</small></th><td><span class="parameter-value">{{ number(parameter.value) }}</span><span>± {{ number(parameter.standard_error) }}</span><span v-if="parameter.confidence_interval">95% CI {{ number(parameter.confidence_interval[0]) }} — {{ number(parameter.confidence_interval[1]) }}</span><span v-else>95% CI —</span><small v-if="parameter.uncertainty_reason">{{parameter.uncertainty_reason}}</small><span v-if="parameter.fixed" class="parameter-fixed">固定</span></td></tr></tbody></table>
         </details>
-        <details class="result-details">
+        <details data-result-section="diagnostics" class="result-details">
           <summary>连续峰性质</summary>
           <PeakGeometryPanel v-if="result.peak_geometry" :geometry="result.peak_geometry" :unit="xUnit" />
           <template v-if="!result.peak_geometry && result.derived_parameters"><h3>派生峰性质</h3><table><tbody><tr v-for="(value, name) in result.derived_parameters" :key="name"><th class="result-label"><span>{{ name }}</span><small>{{ derivedParameterMeaning(String(name)) }}</small></th><td>{{ number(value) }}</td></tr></tbody></table></template>
         </details>
-        <details class="result-details">
+        <details data-result-section="diagnostics" class="result-details">
           <summary>质量与残差指标</summary>
           <table><tbody>
         <tr><th class="result-label"><span>R²（扣背景信号）</span><small>{{ fitQualityMeaning.rSquared }}</small></th><td>{{ number(result.statistics.r_squared) }}</td></tr>
@@ -108,7 +111,7 @@ function derivedParameterMeaning(name: string): string {
         <tr><th class="result-label"><span>异常点</span><small>{{ residualMeaning.outlierCount }}</small></th><td>{{ result.statistics.outlier_count ?? "—" }}</td></tr>
       </tbody></table></section>
         </details>
-        <details class="result-details" data-test="solver-details">
+        <details data-result-section="diagnostics" class="result-details" data-test="solver-details">
           <summary>求解过程</summary>
           <p class="hint">{{ peakModelInfo(result.model)?.formula }}</p>
           <p class="solver-message">{{ result.message }}</p>
@@ -116,7 +119,7 @@ function derivedParameterMeaning(name: string): string {
       <section v-if="result.fit_stages?.length" class="fit-stages"><h3>分阶段拟合记录</h3><ol><li v-for="stage in result.fit_stages" :key="stage.name"><strong>{{ stage.name }}</strong><span>{{ stage.center_fixed ? '峰中心固定' : '峰中心释放' }} · {{ stage.evaluations }} 次函数评估 · {{ stage.converged ? '已完成' : '达到上限' }}</span></li></ol></section>
           <p v-if="result.analysis_metadata?.offset" class="scientific-note">{{ result.analysis_metadata.offset }}</p>
         </details>
-        <details class="result-details" :open="comparing || !!comparison">
+        <details data-result-section="archive" class="result-details" :open="comparing || !!comparison">
           <summary>模型比较</summary>
           <section class="comparison-panel"><div><p>在相同区间和基线下比较峰形，同名参数沿用约束；推荐模型需手动选择。</p><label><input v-model="includeAsymmetric" data-test="include-asymmetric" type="checkbox" />加入非对称模型</label></div><button data-test="compare-models" type="button" :disabled="comparing || fitting || stale" @click="emit('compare',includeAsymmetric)">{{ comparing ? "比较中…" : "比较模型" }}</button><table v-if="comparison" data-test="comparison-table"><thead><tr><th>模型</th><th>R²（扣背景）</th><th>RMSE</th><th>AICc</th><th>BIC</th></tr></thead><tbody><tr v-for="row in comparison.rows" :key="row.model" :class="{ recommended: row.model === comparison.recommended_model }"><td>{{ peakModelInfo(row.model)?.label ?? row.model }}<small v-if="row.model === comparison.recommended_model">推荐</small></td><td>{{ number(row.r_squared) }}</td><td>{{ number(row.rmse) }}</td><td>{{ number(row.aicc) }}</td><td>{{ number(row.bic) }}</td></tr></tbody></table></section>
         </details>
@@ -124,7 +127,7 @@ function derivedParameterMeaning(name: string): string {
       <p v-else-if="stale" class="stale-result" role="status">设置已变更，请重新拟合。</p>
       <p v-else class="hint">暂无拟合结果</p>
     </div>
-    <footer v-if="result" class="result-export-footer">
+    <footer v-if="result" class="result-export-footer" data-result-section="archive">
       <p v-if="fitting" class="hint">拟合完成后可导出。</p>
       <div class="export-actions">
         <button type="button" :disabled="stale || fitting" @click="emit('export', 'curves')">曲线 CSV</button>

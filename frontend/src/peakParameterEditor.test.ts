@@ -9,6 +9,23 @@ const wrappers: Array<{ unmount: () => void }> = [];
 afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); vi.restoreAllMocks(); });
 
 describe('峰参数弹窗', () => {
+  it('锚点弹窗支持撤销、Esc 保留修改及返回焦点，换数据关闭旧编辑',async()=>{
+    const config=reactive(createMultiConfig([0,1,2,3],[0,5,2,0],null,'general'));
+    config.baseline.anchors=[{x:0,y:1},{x:3,y:2}];
+    const w=mount(MultiPeakControls,{attachTo:document.body,props:{config,preview:null,busy:false,candidates:[]}});wrappers.push(w);
+    const entry=w.get('[data-test="edit-baseline-anchors"]'),dialogWrapper=w.get('[data-test="baseline-anchor-dialog"]');
+    const dialog=dialogWrapper.element as HTMLDialogElement;
+    dialog.showModal=()=>dialog.setAttribute('open','');dialog.close=()=>{dialog.removeAttribute('open');dialog.dispatchEvent(new Event('close'));};
+    expect(dialog.open).toBe(false);await entry.trigger('click');expect(dialog.open).toBe(true);
+    await dialogWrapper.get('[aria-label="锚点 1 Y"]').setValue(9);
+    await w.get('[data-test="undo-baseline-anchors"]').trigger('click');expect(config.baseline.anchors[0].y).toBe(1);
+    await dialogWrapper.get('[aria-label="锚点 2 X"]').setValue(2.5);
+    await dialogWrapper.trigger('cancel');expect(dialog.open).toBe(false);expect(config.baseline.anchors[1].x).toBe(2.5);
+    expect(document.activeElement).toBe(entry.element);
+    await entry.trigger('click');expect(dialog.open).toBe(true);
+    const next=reactive(createMultiConfig([4,5,6],[0,2,0],null,'general'));await w.setProps({config:next});
+    expect(dialog.open).toBe(false);await w.get('[data-test="undo-baseline-anchors"]').trigger('click');expect(next.baseline.anchors).toEqual([]);
+  });
   it('撤销恢复标签、启用、模型、参数与约束，切换数据后旧快照不可恢复',async()=>{
     const config=reactive(createMultiConfig([0,1,2,3],[0,5,2,0],null,'general'));addMultiComponent(config);addMultiComponent(config);
     config.constraints.push({source:{component:'p1',parameter:'xc'},target:{component:'p2',parameter:'xc'},kind:'offset',value:.2});
@@ -27,7 +44,7 @@ describe('峰参数弹窗', () => {
     addMultiComponent(config); addMultiComponent(config);
     const w = mount(MultiPeakControls, { attachTo: document.body, props: { config, preview: null, busy: false, candidates: [] } }); wrappers.push(w);
     const button = w.get('[data-test="edit-all-peaks"]');
-    expect(w.findAll('dialog')).toHaveLength(1);
+    expect(w.findAll('dialog[aria-label="全部峰参数"]')).toHaveLength(1);
     const dialog = w.get('[aria-label="全部峰参数"]').element as HTMLDialogElement;
     dialog.showModal = () => dialog.setAttribute('open', '');
     dialog.close = () => { dialog.removeAttribute('open'); dialog.dispatchEvent(new Event('close')); };

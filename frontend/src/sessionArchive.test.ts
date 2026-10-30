@@ -9,6 +9,15 @@ function batch():BatchSession{
   return {kind:'batch',template:request,batch_id:'batch-1',status:'running',sequential:true,rows:[{id:'row-1',label:'原谱',request,result:r,status:'success',accepted_attempt_id:'attempt-1',attempts:[attempt]},{id:'row-2',label:'中断',request:structuredClone(request),result:null,status:'running',accepted_attempt_id:null,attempts:[{...structuredClone(attempt),id:'attempt-2',result:null,manually_accepted:false}]}],metadata:{'row-1':emptyMetadata(),'row-2':emptyMetadata()},audits:{}};
 }
 describe('独立本地会话格式',()=>{
+  it('连续计算后待复核或失败条目可位于成功条目前，保存恢复不自动接受',()=>{
+    for(const status of ['review','failed'] as const){
+      const w=batch();w.status='done';w.rows[1]={...structuredClone(w.rows[0]),id:'row-2',accepted_attempt_id:'attempt-2',attempts:[{...structuredClone(w.rows[0].attempts[0]),id:'attempt-2'}]};
+      w.rows[0].status=status;w.rows[0].accepted_attempt_id=null;w.rows[0].attempts[0].manually_accepted=false;
+      const rows=normalizedBatchRows((readSession(writeSession(w)).workspace as BatchSession).rows);
+      expect(rows.map(r=>r.status)).toEqual([status,'success']);expect(rows[0].attempts[0].manually_accepted).toBe(false);
+    }
+    const pending=batch();pending.rows[0].status='pending';pending.rows[1].status='success';expect(()=>normalizedBatchRows(pending.rows)).toThrow('未完成');
+  });
   it('拒绝越界求解设置、循环约束和不一致的结果配置',()=>{
     const a=single();a.configuration.solver.max_nfev=0;expect(()=>writeSession(a)).toThrow('求解设置');
     const b=single();b.configuration.constraints.push({source:{component:'p1',parameter:'xc'},target:{component:'p1',parameter:'xc'},kind:'offset',value:0});expect(()=>writeSession(b)).toThrow('自引用');

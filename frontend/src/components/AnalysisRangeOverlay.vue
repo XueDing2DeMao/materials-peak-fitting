@@ -17,7 +17,6 @@ const overlayStyle=computed(()=>props.geometry?Object.fromEntries(Object.entries
           <span aria-hidden="true">↔</span>
         </button>
       </div>
-      <div v-if="selectionMode" data-test="range-selection-guide" class="range-selection-guide" role="status"><strong>框选分析区间</strong><span>水平拖动，松开后更新区间。</span></div>
 </template>
 <style scoped>
 .range-reversed .range-boundary-handle.start {left:auto;right:-8px;}

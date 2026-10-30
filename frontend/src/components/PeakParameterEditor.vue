@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 import { memorySnapshot } from '../useWorkProtection';
 import { PARAMETER_LABELS, peakModelInfo, type PeakParameterName } from '../peakModels';
 import type { MultiComponent, MultiConstraint } from '../multipeakTypes';
 import type { XpsParameter } from '../xpsTypes';
 
 const props = defineProps<{ component: MultiComponent; constraints: MultiConstraint[]; unit: string; reversed?: boolean; dataVersion?:unknown }>();
-const emit=defineEmits<{restored:[]}>();
+const emit=defineEmits<{restored:[];select:[]}>();
 let snapshot:ReturnType<typeof memorySnapshot<{component:MultiComponent;constraints:MultiConstraint[]}>>|null=null;
 const canUndo=ref(false);
 function undo(){const old=snapshot?.restore(props.dataVersion);if(!old)return;Object.assign(props.component,old.component);props.constraints.splice(0,props.constraints.length,...old.constraints);emit('restored');}
@@ -23,12 +23,14 @@ function bound(event: Event, parameter: XpsParameter, name: 'lower' | 'upper') {
   const value = (event.target as HTMLInputElement).value;
   parameter[name] = value === '' ? null : Number(value);
 }
-function open() { snapshot=memorySnapshot({component:props.component,constraints:props.constraints},props.dataVersion);canUndo.value=true;restoreFocus = true; dialog.value?.showModal(); isOpen.value = true; }
+function open() { emit('select');snapshot=memorySnapshot({component:props.component,constraints:props.constraints},props.dataVersion);canUndo.value=true;restoreFocus = true; dialog.value?.showModal(); isOpen.value = true; }
 function close() { dialog.value?.close(); }
 function closed() { isOpen.value = false; if (restoreFocus) editorButton.value?.focus(); }
 function leave() { restoreFocus = false; if (dialog.value?.open) close(); }
 onDeactivated(leave);
 onBeforeUnmount(leave);
+async function focusParameter(name:string){open();await nextTick();const inputs=Array.from(dialog.value?.querySelectorAll<HTMLInputElement>('input')??[]);const input=inputs.find(input=>!input.disabled&&input.getAttribute('aria-label')===`${props.component.id} ${name} 初值`)??inputs.find(input=>!input.disabled&&input.getAttribute('aria-label')===`${props.component.id} ${name} 下限`);input?.focus();input?.select();}
+defineExpose({focusParameter});
 </script>
 
 <template>

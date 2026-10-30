@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import ParameterTabs, { type ParameterSection } from "./ParameterTabs.vue";
 import PeakParameterEditor from './PeakParameterEditor.vue';
-import { computed, ref } from "vue";
-import { addComponent, makeDoublet, removeComponent, changeComponentModel, requiredConfigVersion } from "../xpsState";
+import { computed, nextTick, ref } from "vue";
+import { addComponent, makeDoublet, changeComponentModel, requiredConfigVersion } from "../xpsState";
 import { MODEL_GROUPS, peakModelInfo } from "../peakModels";
 import type { XpsModel, Candidate, XpsComponent, XpsPreview, XpsRequest } from "../xpsTypes";
-const props=defineProps<{config:XpsRequest;previewed:boolean;backgroundPreview:XpsPreview|null;busy:boolean;candidates:Candidate[]}>();
-const emit=defineEmits<{preview:[];fit:[];candidates:[];error:[message:string];calibrate:[value:number]}>();
+const props=defineProps<{selectedPeak?:string;hasResult?:boolean;config:XpsRequest;previewed:boolean;backgroundPreview:XpsPreview|null;busy:boolean;candidates:Candidate[]}>();
+const emit=defineEmits<{remove:[id:string];select:[id:string];preview:[];fit:[];candidates:[];error:[message:string];calibrate:[value:number]}>();
 const manualBackgroundLevels=computed(()=>props.config.background.low_level!=null||props.config.background.high_level!=null);
 const customBackgroundWindows=computed(()=>{
   const {range_start:lo,range_end:hi,background}=props.config,span=(hi-lo)*.03;
@@ -27,14 +28,22 @@ function bind(){
 }
 function resetWindows(){const c=props.config,w=(c.range_end-c.range_start)*.03;c.background.low_window=[c.range_start,c.range_start+w];c.background.high_window=[c.range_end-w,c.range_end];}
 function level(event:Event,name:"low_level"|"high_level"){const value=(event.target as HTMLInputElement).value;props.config.background[name]=value===""?null:Number(value);}
+const section=ref<ParameterSection>('range');
+const peakEditors=ref<Record<string,InstanceType<typeof PeakParameterEditor>|null>>({});
+async function selectPeak(id:string,parameter?:string){section.value='peaks';await nextTick();const row=Array.from(panel.value?.querySelectorAll<HTMLElement>('[data-peak-id]')??[]).find(row=>row.dataset.peakId===id);row?.scrollIntoView?.({block:'nearest'});row?.querySelector<HTMLButtonElement>('.peak-select')?.focus({preventScroll:true});if(parameter)void peakEditors.value[id]?.focusParameter(parameter);}
+const nextSection=computed<ParameterSection|null>(()=>props.busy||!props.config.x.length?null:!props.config.components.some(c=>c.enabled)?'peaks':props.config.background.kind==='shirley'&&!props.config.background.confirmed?'baseline':null);
+async function goToNextStep(){if(!nextSection.value)return;section.value=nextSection.value;await nextTick();panel.value?.querySelector<HTMLElement>('.parameter-section:not([style*="display: none"]) button:not(:disabled), .parameter-section:not([style*="display: none"]) select:not(:disabled)')?.focus();}
+const panel=ref<HTMLElement|null>(null);
 const rangeStartInput=ref<HTMLInputElement|null>(null),rangeEndInput=ref<HTMLInputElement|null>(null);
-function focusRangeEndpoint(endpoint:'start'|'end'){const input=endpoint==='start'?rangeStartInput.value:rangeEndInput.value;input?.focus();input?.select();}
-defineExpose({focusRangeEndpoint});
+async function focusRangeEndpoint(endpoint:'start'|'end'){section.value='range';await nextTick();const input=endpoint==='start'?rangeStartInput.value:rangeEndInput.value;input?.focus();input?.select();}
+async function showSection(target:ParameterSection){section.value=target;await nextTick();panel.value?.querySelector<HTMLElement>('.parameter-section:not([style*="display: none"]) input:not(:disabled), .parameter-section:not([style*="display: none"]) select:not(:disabled), .parameter-section:not([style*="display: none"]) button:not(:disabled)')?.focus();}
+defineExpose({showSection,selectPeak,focusRangeEndpoint});
 </script>
 <template>
-  <section class="panel xps-controls">
+  <section ref="panel" class="panel xps-controls">
     <div class="panel-title"><div><h2>XPS 拟合设置</h2></div></div>
-    <div class="settings-body">
+    <ParameterTabs v-model="section" /><div class="settings-body">
+<section v-show="section==='range'" class="parameter-section" aria-label="分析区间">
   <h3 class="workflow-section-title"><span>1</span>分析区间</h3>
     <div class="xps-two"><label>区间下限 / eV<input ref="rangeStartInput" v-model.number="config.range_start" data-test="xps-range-start" type="number" step="any" /></label><label>区间上限 / eV<input ref="rangeEndInput" v-model.number="config.range_end" type="number" step="any" /></label></div>
     <details class="settings-disclosure" :open="config.shift_eV!==0"><summary>能量校准 <span class="hint">{{config.shift_eV===0?'未偏移':`${config.shift_eV} eV`}}</span></summary>
@@ -42,7 +51,7 @@ defineExpose({focusRangeEndpoint});
     <label>校准依据<input v-model="config.calibration_note" placeholder="参考峰、参考值与依据" /></label>
     <p class="hint">校准能量 = 原始能量 + 偏移；区间、峰位与端点窗口同步平移。</p>
     </details>
-    <h3 class="workflow-section-title"><span>2</span>背景与复核</h3>
+    </section><section v-show="section==='baseline'" class="parameter-section" aria-label="基线设置"><h3 class="workflow-section-title"><span>2</span>背景与复核</h3>
     <label>背景模型<select v-model="config.background.kind" data-test="xps-background"><option value="none">无背景</option><option value="line">直线</option><option value="shirley">静态 Shirley</option></select></label>
     <template v-if="config.background.kind!=='none'">
       <details class="settings-disclosure" data-test="xps-background-details" :open="manualBackgroundLevels||customBackgroundWindows"><summary>背景端点与窗口 <span class="hint">{{manualBackgroundLevels?'含手动水平':'窗口中位数'}}{{customBackgroundWindows?' · 自定义窗口':''}}</span></summary><p class="hint">端点水平留空时使用窗口中位数。</p>
@@ -58,7 +67,7 @@ defineExpose({focusRangeEndpoint});
       <label class="xps-check"><input v-model="config.background.confirmed" type="checkbox" :disabled="!previewed" data-test="xps-confirm" aria-describedby="xps-review-hint" />已复核当前 Shirley 背景</label>
       <p id="xps-review-hint" class="confirmation-hint">{{!previewed?'先预览，再检查背景并勾选。':config.background.confirmed?'修改背景后需重新复核。':'检查图中背景后勾选确认。'}}</p>
     </div>
-    <h3 class="workflow-section-title"><span>3</span>峰与参数</h3>
+    </section><section v-show="section==='peaks'" class="parameter-section" aria-label="峰参数"><h3 class="workflow-section-title"><span>3</span>峰与参数</h3>
     <div class="xps-actions"><button @click="add()" :disabled="!config.x.length" data-test="xps-add">添加单峰</button><button @click="emit('candidates')" :disabled="busy||!config.x.length">检测候选峰</button></div>
     <div v-if="candidates.length" class="xps-candidates"><p class="hint">点击候选峰添加初值。</p><button v-for="(c,i) in candidates" :key="i" @click="add(c)">{{ c.xc.toFixed(3) }} eV</button></div>
     <details class="settings-disclosure" :open="config.groups.length>0"><summary>双峰组（{{config.groups.length}}）</summary>
@@ -67,12 +76,12 @@ defineExpose({focusRangeEndpoint});
     <p class="hint">间距与面积比需有依据；不自动判定化学态。</p>
     <div v-for="g in config.groups" :key="g.id" class="xps-group"><label>{{ g.id }} · {{ g.component_ids.join(' + ') }}<input v-model="g.label" aria-label="峰组标签" /></label></div>
     </details>
-    <section v-for="c in config.components" :key="c.id" class="xps-peak peak-card" :aria-label="`${c.id} · ${c.label}`">
-      <div class="peak-card-heading"><label class="xps-check"><input v-model="c.enabled" type="checkbox" :aria-label="`启用 ${c.id}`" /><span class="sr-only">启用此峰</span></label><strong :title="`${c.id} · ${c.label}`">{{c.id}} · {{c.label}}</strong><small class="peak-card-model" :title="peakModelInfo(c.model)?.label">{{peakModelInfo(c.model)?.label}}</small></div>
-      <PeakParameterEditor :data-version="config.x" @restored="config.schema_version=requiredConfigVersion(config)" :component="c" :constraints="config.constraints" unit="eV" reversed>
+    <section v-for="c in config.components" :key="c.id" :data-peak-id="c.id" :class="{'is-selected':selectedPeak===c.id}" class="xps-peak peak-card" :aria-label="`${c.id} · ${c.label}`">
+      <div class="peak-card-heading"><label class="xps-check"><input v-model="c.enabled" type="checkbox" :aria-label="`启用 ${c.id}`" /><span class="sr-only">启用此峰</span></label><button type="button" class="peak-select" :aria-pressed="selectedPeak===c.id" @click="selectPeak(c.id);emit('select',c.id)" :title="`${c.id} · ${c.label}`">{{c.id}} · {{c.label}}</button><small class="peak-card-model" :title="peakModelInfo(c.model)?.label">{{peakModelInfo(c.model)?.label}}</small></div>
+      <PeakParameterEditor :ref="el=>{peakEditors[c.id]=el as InstanceType<typeof PeakParameterEditor>|null}" @select="emit('select',c.id)" :data-version="config.x" @restored="config.schema_version=requiredConfigVersion(config)" :component="c" :constraints="config.constraints" unit="eV" reversed>
         <template #identity><div class="xps-two"><label>显示标签<input v-model="c.label" /></label><label>峰形<select :value="c.model" @change="modelChanged(c,$event)"><optgroup v-for="group in MODEL_GROUPS" :key="group.label" :label="group.label"><option v-for="model in group.models.filter(m=>m.id!=='psd_voigt2')" :key="model.id" :value="model.id">{{model.label}}</option></optgroup></select></label></div></template>
       </PeakParameterEditor>
-      <div class="peak-card-actions"><button class="quiet-button" :disabled="referenced(c.id)" @click="removeComponent(config,c.id)">删除 {{ c.id }}</button></div>
+      <div class="peak-card-actions"><button class="quiet-button" :disabled="referenced(c.id)" @click="emit('remove',c.id)">删除 {{ c.id }}</button></div>
       <button v-if="referenced(c.id)" class="quiet-button peak-card-unlink" @click="unlink(c.id)">解除该峰的所有关联</button>
     </section>
     <details class="xps-relations" :open="config.constraints.length>0"><summary>峰间约束（{{ config.constraints.length }}）</summary>
@@ -81,6 +90,6 @@ defineExpose({focusRangeEndpoint});
       <div class="xps-two"><label>关系<select v-model="parameter"><option value="xc">峰位偏移</option><option value="A">面积比例</option><option value="w">整体宽度 w 比例</option><option value="h_low">低 X 半宽比例</option><option value="h_high">高 X 半宽比例</option><option value="sigma">高斯核 σ 比例</option></select></label><label>关系数值<input v-model.number="relationValue" type="number" step="any" /></label></div><button @click="bind">添加约束</button>
     </details>
     <details><summary>求解设置</summary><div class="xps-two"><label>最大函数评估次数<input v-model.number="config.solver.max_nfev" type="number" /></label><label>收敛阈值<input v-model.number="config.solver.tolerance" type="number" step="any" /></label></div></details>
-    </div><div class="fit-primary-footer"><span class="section-kicker">计算与复核</span><button class="primary" :disabled="Boolean(fitBlockedMessage)" :aria-describedby="fitBlockedMessage?'xps-fit-blocker':undefined" @click="emit('fit')" data-test="xps-fit">{{busy?'处理中…':'开始拟合'}}</button><p v-if="fitBlockedMessage" id="xps-fit-blocker" class="fit-blocker" role="status">{{fitBlockedMessage}}</p></div>
+    </section></div><div class="fit-primary-footer"><button v-if="nextSection" type="button" data-test="next-fit-step" class="next-step-action" @click="goToNextStep">{{nextSection==='peaks'?'前往峰设置':'前往背景复核'}}</button><span class="section-kicker">计算与复核</span><button class="primary" :disabled="Boolean(fitBlockedMessage)" :aria-describedby="fitBlockedMessage?'xps-fit-blocker':undefined" @click="emit('fit')" data-test="xps-fit">{{busy?'处理中…':hasResult?'重新拟合':'开始拟合'}}</button><p v-if="fitBlockedMessage" id="xps-fit-blocker" class="fit-blocker" role="status">{{fitBlockedMessage}}</p></div>
   </section>
 </template>

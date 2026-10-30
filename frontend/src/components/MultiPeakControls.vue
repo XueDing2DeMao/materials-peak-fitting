@@ -1,14 +1,16 @@
 <script setup lang="ts">
+import ParameterTabs, { type ParameterSection } from "./ParameterTabs.vue";
+import PeakParameterEditor from "./PeakParameterEditor.vue";
 import AllPeakParameterEditor from './AllPeakParameterEditor.vue';
 import { suggestBaselineAnchors } from '../baselineSuggestions';
-import { computed, ref } from 'vue';
-import { addMultiComponent, changeAllMultiModels, removeMultiComponent, validateMulti, clone } from '../multipeakState';
+import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
+import { addMultiComponent, changeAllMultiModels, validateMulti, clone } from '../multipeakState';
 import { MODEL_GROUPS, peakModelInfo, type PeakParameterName } from '../peakModels';
 import type { PeakModel } from '../types';
 import type { MultiRequest, MultiPreview } from '../multipeakTypes';
 import type { Candidate } from '../xpsTypes';
-const props=defineProps<{unified?:boolean;model?:PeakModel;config:MultiRequest;preview:MultiPreview|null;busy:boolean;candidates:Candidate[]}>();
-const emit=defineEmits<{preview:[];fit:[];candidates:[];error:[message:string];model:[model:PeakModel]}>();
+const props=defineProps<{selectedPeak?:string;hasResult?:boolean;unified?:boolean;model?:PeakModel;config:MultiRequest;preview:MultiPreview|null;busy:boolean;candidates:Candidate[]}>();
+const emit=defineEmits<{remove:[id:string];select:[id:string];preview:[];fit:[];candidates:[];error:[message:string];model:[model:PeakModel]}>();
 const selectedModel=ref<PeakModel>(props.config.components[0]?.model??'gaussian'),modelError=ref('');
 const sharedModel=computed(()=>props.model??selectedModel.value);
 const mixedModels=computed(()=>props.config.components.some(c=>c.model!==sharedModel.value));
@@ -47,18 +49,34 @@ function bind(){report(()=>{
   if(!source.value||!target.value||source.value===target.value)throw new Error('请选择不同的来源峰和目标峰');
   const next=clone(props.config);next.constraints.push({source:{component:source.value,parameter:parameter.value},target:{component:target.value,parameter:parameter.value},kind:parameter.value==='xc'?'offset':'ratio',value:relationValue.value});validateMulti(next);props.config.constraints=next.constraints;
 });}
+const section=ref<ParameterSection>('range');
+const peakEditors=ref<Record<string,InstanceType<typeof PeakParameterEditor>|null>>({});
+async function selectPeak(id:string,parameter?:string){section.value='peaks';await nextTick();const row=Array.from(panel.value?.querySelectorAll<HTMLElement>('[data-peak-id]')??[]).find(row=>row.dataset.peakId===id);row?.scrollIntoView?.({block:'nearest'});row?.querySelector<HTMLButtonElement>('.peak-select')?.focus({preventScroll:true});if(parameter)void peakEditors.value[id]?.focusParameter(parameter);}
+const nextSection=computed<ParameterSection|null>(()=>props.busy||!props.config.x.length?null:!props.config.components.some(c=>c.enabled)?'peaks':baselineNeedsReview.value?'baseline':mixedModels.value?'peaks':null);
+async function goToNextStep(){if(!nextSection.value)return;section.value=nextSection.value;await nextTick();panel.value?.querySelector<HTMLElement>('.parameter-section:not([style*="display: none"]) button:not(:disabled), .parameter-section:not([style*="display: none"]) select:not(:disabled)')?.focus();}
+const panel=ref<HTMLElement|null>(null);
 const rangeStartInput=ref<HTMLInputElement|null>(null),rangeEndInput=ref<HTMLInputElement|null>(null);
-function focusRangeEndpoint(endpoint:'start'|'end'){const input=endpoint==='start'?rangeStartInput.value:rangeEndInput.value;input?.focus();input?.select();}
-defineExpose({focusRangeEndpoint});
+const anchorDialog=ref<HTMLDialogElement|null>(null),anchorButton=ref<HTMLButtonElement|null>(null),anchorsOpen=ref(false);
+let anchorSnapshot:MultiRequest['baseline']['anchors']|null=null,restoreAnchorFocus=true;
+async function openAnchors(index?:number){if(props.busy)return;anchorSnapshot=props.config.baseline.anchors.map(a=>({...a}));restoreAnchorFocus=true;anchorDialog.value?.showModal();anchorsOpen.value=true;await nextTick();if(index!==undefined){const input=anchorDialog.value?.querySelector<HTMLInputElement>(`[aria-label="锚点 ${index+1} X"]`);input?.focus();input?.select();}}
+function closeAnchors(){anchorDialog.value?.close();}
+function anchorsClosed(){anchorsOpen.value=false;anchorSnapshot=null;if(restoreAnchorFocus)anchorButton.value?.focus({preventScroll:true});}
+function undoAnchors(){if(anchorSnapshot)props.config.baseline.anchors=anchorSnapshot.map(a=>({...a}));}
+function leaveAnchors(){restoreAnchorFocus=false;anchorSnapshot=null;if(anchorDialog.value?.open)closeAnchors();anchorsOpen.value=false;}
+watch(()=>[props.config,props.config.x,props.config.baseline.kind],leaveAnchors);
+onDeactivated(leaveAnchors);onBeforeUnmount(leaveAnchors);
+async function focusRangeEndpoint(endpoint:'start'|'end'){section.value='range';await nextTick();const input=endpoint==='start'?rangeStartInput.value:rangeEndInput.value;input?.focus();input?.select();}
+async function showSection(target:ParameterSection){section.value=target;await nextTick();panel.value?.querySelector<HTMLElement>('.parameter-section:not([style*="display: none"]) input:not(:disabled), .parameter-section:not([style*="display: none"]) select:not(:disabled), .parameter-section:not([style*="display: none"]) button:not(:disabled)')?.focus();}
+defineExpose({showSection,selectPeak,focusRangeEndpoint,openAnchors});
 </script>
-<template><section class="panel xps-controls"><div class="panel-title"><h2>{{unified?'峰拟合设置':'多峰拟合设置'}}</h2></div>
-  <div class="settings-body">
+<template><section ref="panel" class="panel xps-controls"><div class="panel-title"><h2>{{unified?'峰拟合设置':'多峰拟合设置'}}</h2></div>
+  <ParameterTabs v-model="section" /><div class="settings-body">
+<section v-show="section==='range'" class="parameter-section" aria-label="分析区间">
   <h3 class="workflow-section-title"><span>1</span>分析区间</h3>
   <div class="xps-two"><label>区间下限 / {{unit()}}<input ref="rangeStartInput" v-model.number="config.range_start" type="number" step="any" data-test="multi-range-start" /></label><label>区间上限 / {{unit()}}<input ref="rangeEndInput" v-model.number="config.range_end" data-test="multi-range-end" type="number" step="any" /></label></div>
-  <h3 class="workflow-section-title"><span>2</span>基线与复核</h3><label>基线模型<select v-model="config.baseline.kind" data-test="multi-baseline"><option value="none">无基线</option><option value="constant">常数</option><option value="line">直线</option><option value="polynomial">多项式</option><option value="spline">Spline</option><option value="bspline">B-Spline</option></select></label>
+  </section><section v-show="section==='baseline'" class="parameter-section" aria-label="基线设置"><h3 class="workflow-section-title"><span>2</span>基线与复核</h3><label>基线模型<select v-model="config.baseline.kind" data-test="multi-baseline"><option value="none">无基线</option><option value="constant">常数</option><option value="line">直线</option><option value="polynomial">多项式</option><option value="spline">Spline</option><option value="bspline">B-Spline</option></select></label>
   <template v-if="config.baseline.kind!=='none'"><details class="ui-help"><summary>基线设置说明</summary><p>常数／直线未填锚点时，使用区间两端各 5% 数据的中位数。其他模型需设置足够锚点。</p></details>
-  <div v-for="(a,i) in config.baseline.anchors" :key="i" class="xps-two"><label>锚点 {{i+1}} X<input v-model.number="a.x" type="number" step="any" /></label><label>Y<input v-model.number="a.y" type="number" step="any" /></label><button @click="config.baseline.anchors.splice(i,1)">删除锚点 {{i+1}}</button></div>
-  <div class="xps-actions"><button @click="config.baseline.anchors.push({x:config.range_start,y:0})">添加基线锚点</button><button @click="suggestAnchors" :disabled="busy||!config.x.length">生成建议锚点</button><button v-if="config.baseline.anchors.length" @click="config.baseline.anchors=[]">清空锚点</button></div>
+  <div class="baseline-anchor-actions"><button ref="anchorButton" type="button" aria-haspopup="dialog" :aria-expanded="anchorsOpen" :disabled="busy" data-test="edit-baseline-anchors" @click="openAnchors()">编辑基线锚点（{{config.baseline.anchors.length}}）</button><button type="button" @click="suggestAnchors" :disabled="busy||!config.x.length">生成建议锚点</button></div>
   <label v-if="config.baseline.kind==='polynomial'">多项式阶数<input v-model.number="config.baseline.degree" type="number" min="1" max="8" /></label>
   <label v-if="config.baseline.kind==='bspline'">平滑系数<input v-model.number="config.baseline.smoothing" type="number" min="0" step="any" /></label>
   </template><button :disabled="busy||!config.x.length" @click="emit('preview')" data-test="multi-preview">预览基线</button>
@@ -67,16 +85,16 @@ defineExpose({focusRangeEndpoint});
     <label class="xps-check"><input v-model="config.baseline.confirmed" type="checkbox" :disabled="busy||!preview" data-test="multi-confirm" aria-describedby="multi-review-hint" />已复核当前基线</label>
     <p id="multi-review-hint" class="confirmation-hint">{{!preview?'先预览，再检查图中基线并勾选。':config.baseline.confirmed?'修改区间或基线后需重新复核。':'检查图中基线后勾选确认。'}}</p>
   </div>
-  <h3 class="workflow-section-title"><span>3</span>峰与参数</h3><div class="xps-actions"><button @click="add()" :disabled="!config.x.length||config.components.length>=40" data-test="multi-add">添加峰</button><button @click="emit('candidates')" :disabled="busy||!config.x.length">检测候选峰</button></div>
+  </section><section v-show="section==='peaks'" class="parameter-section" aria-label="峰参数"><h3 class="workflow-section-title"><span>3</span>峰与参数</h3><div class="xps-actions"><button @click="add()" :disabled="!config.x.length||config.components.length>=40" data-test="multi-add">添加峰</button><button @click="emit('candidates')" :disabled="busy||!config.x.length">检测候选峰</button></div>
   <p v-if="!config.components.length" class="hint">点击“图上添加峰”选峰，或“添加峰”从区间最高点建立初值。</p>
   <label>统一峰函数<select :value="mixedModels?'':sharedModel" :disabled="busy" data-test="multi-model" @change="selectModel"><option v-if="mixedModels" value="" disabled>请选择统一峰函数</option><optgroup v-for="group in MODEL_GROUPS" :key="group.label" :label="group.label"><option v-for="m in group.models" :key="m.id" :value="m.id">{{m.label}}</option></optgroup></select></label>
   <p v-if="modelError" class="error" role="alert">{{modelError}}</p>
   <AllPeakParameterEditor :data-version="config.x" :components="config.components" :constraints="config.constraints" :model="sharedModel" :unit="unit()" :busy="busy" :error="modelError" @model="modelChanged" @restore="restoreParameters" />
   <div v-if="candidates.length" class="xps-candidates"><button v-for="(c,i) in candidates" :key="i" @click="add(c)">{{c.xc.toFixed(3)}} {{unit()}}</button></div>
-    <section v-for="c in config.components" :key="c.id" class="xps-peak peak-card" :aria-label="`${c.id} · ${c.label}`">
-      <div class="peak-card-heading"><label class="xps-check"><input v-model="c.enabled" type="checkbox" :aria-label="`启用 ${c.id}`" /><span class="sr-only">启用此峰</span></label><strong :title="`${c.id} · ${c.label}`">{{c.id}} · {{c.label}}</strong><small class="peak-card-model" :title="peakModelInfo(c.model)?.label">{{peakModelInfo(c.model)?.label}}</small></div>
-      <p class="hint" :aria-label="`${c.id} 参数摘要`">峰位 {{formatCenter(c.parameters.xc?.value)}} <span v-if="c.parameters.xc?.fixed">固定</span></p>
-      <div class="peak-card-actions"><button class="quiet-button" :disabled="referenced(c.id)" @click="removeMultiComponent(config,c.id)">删除 {{ c.id }}</button></div>
+    <section v-for="c in config.components" :key="c.id" :data-peak-id="c.id" :class="{'is-selected':selectedPeak===c.id}" class="xps-peak peak-card" :aria-label="`${c.id} · ${c.label}`">
+      <div class="peak-card-heading"><label class="xps-check"><input v-model="c.enabled" type="checkbox" :aria-label="`启用 ${c.id}`" /><span class="sr-only">启用此峰</span></label><button type="button" class="peak-select" :aria-pressed="selectedPeak===c.id" @click="selectPeak(c.id);emit('select',c.id)" :title="`${c.id} · ${c.label}`">{{c.id}} · {{c.label}}</button><small class="peak-card-model" :title="peakModelInfo(c.model)?.label">{{peakModelInfo(c.model)?.label}}</small></div>
+      <PeakParameterEditor :ref="el=>{peakEditors[c.id]=el as InstanceType<typeof PeakParameterEditor>|null}" :data-version="config.x" :component="c" :constraints="config.constraints" :unit="unit()" @select="emit('select',c.id)"><template #identity><label>显示标签<input v-model="c.label" /></label></template></PeakParameterEditor>
+      <div class="peak-card-actions"><button class="quiet-button" :disabled="referenced(c.id)" @click="emit('remove',c.id)">删除 {{ c.id }}</button></div>
       <button v-if="referenced(c.id)" class="quiet-button peak-card-unlink" @click="unlink(c.id)">解除该峰的所有关联</button>
     </section>
     <details v-if="!unified||config.components.length>1||config.constraints.length" class="xps-relations" :open="config.constraints.length>0"><summary>峰间约束（{{ config.constraints.length }}）</summary>
@@ -86,12 +104,26 @@ defineExpose({focusRangeEndpoint});
     </details>
   <slot name="single-tools" />
   <details><summary>求解设置</summary><slot name="solver" /><div class="xps-two"><label>最大函数评估次数<input v-model.number="config.solver.max_nfev" type="number" min="1" max="20000" /></label><label>收敛阈值<input v-model.number="config.solver.tolerance" type="number" step="any" /></label></div></details>
-  </div><div class="fit-primary-footer"><span class="section-kicker">计算与复核</span>
-    <button class="primary" :disabled="Boolean(fitBlockedMessage)" :aria-describedby="fitBlockedMessage?'multi-fit-blocker':undefined" @click="emit('fit')" data-test="multi-fit">{{busy?'处理中…':unified?'开始拟合':'拟合全部启用峰'}}</button>
+  </section></div><div class="fit-primary-footer"><button v-if="nextSection" type="button" data-test="next-fit-step" class="next-step-action" @click="goToNextStep">{{nextSection==='peaks'?'前往峰设置':'前往背景复核'}}</button><span class="section-kicker">计算与复核</span>
+    <button class="primary" :disabled="Boolean(fitBlockedMessage)" :aria-describedby="fitBlockedMessage?'multi-fit-blocker':undefined" @click="emit('fit')" data-test="multi-fit">{{busy?'处理中…':hasResult?'重新拟合':unified?'开始拟合':'拟合全部启用峰'}}</button>
     <p v-if="fitBlockedMessage" id="multi-fit-blocker" class="fit-blocker" role="status" data-test="multi-fit-blocker">{{fitBlockedMessage}}</p>
-    <div v-if="!busy&&config.x.length&&config.components.some(c=>c.enabled)&&baselineNeedsReview" class="xps-actions">
-      <button v-if="!preview" type="button" data-test="multi-preview-next" @click="emit('preview')">预览基线</button>
-      <button v-else type="button" class="confirmation-action" data-test="multi-confirm-next" @click="config.baseline.confirmed=true">复核无误，确认基线</button>
-    </div>
+
   </div>
+  <dialog ref="anchorDialog" class="parameter-dialog baseline-anchor-dialog" aria-label="基线锚点" data-test="baseline-anchor-dialog" @cancel.prevent="closeAnchors" @close="anchorsClosed">
+    <header class="parameter-dialog-header"><div><h2>基线锚点</h2><p class="hint">{{config.baseline.anchors.length}} 个锚点 · 编号对应图中标记</p></div><button type="button" aria-label="关闭基线锚点" @click="closeAnchors">关闭</button></header>
+    <div class="parameter-dialog-body">
+      <div class="xps-actions"><button type="button" :disabled="busy" @click="config.baseline.anchors.push({x:config.range_start,y:0})">添加基线锚点</button><button type="button" :disabled="busy||!config.baseline.anchors.length" @click="config.baseline.anchors=[]">清空锚点</button></div>
+      <div v-if="config.baseline.anchors.length" class="baseline-anchor-editor">
+        <div class="anchor-grid-head" aria-hidden="true"><span>#</span><span>X / {{unit()}}</span><span>Y / 原数据单位</span><span>删除</span></div>
+        <div v-for="(a,i) in config.baseline.anchors" :key="i" class="anchor-row">
+          <span class="anchor-number" aria-hidden="true">{{i+1}}</span>
+          <input v-model.number="a.x" :disabled="busy" :aria-label="`锚点 ${i+1} X`" type="number" step="any" />
+          <input v-model.number="a.y" :disabled="busy" :aria-label="`锚点 ${i+1} Y`" type="number" step="any" />
+          <button type="button" :disabled="busy" :aria-label="`删除锚点 ${i+1}`" :title="`删除锚点 ${i+1}`" @click="config.baseline.anchors.splice(i,1)">×</button>
+        </div>
+      </div>
+      <p v-else class="hint">暂无锚点。可手动添加、生成建议，或关闭弹窗后在图上选点。</p>
+    </div>
+    <footer class="parameter-dialog-footer"><p class="hint">修改即时生效；关闭或 Esc 保留修改。修改后需重新预览并复核基线。</p><button type="button" :disabled="busy" data-test="undo-baseline-anchors" @click="undoAnchors">撤销本次修改</button><button type="button" class="primary" @click="closeAnchors">完成</button></footer>
+  </dialog>
 </section></template>

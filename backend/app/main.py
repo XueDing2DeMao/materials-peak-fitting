@@ -21,6 +21,8 @@ from .fitting import FitInput, FitResult, analyze_single_peak, compare_single_pe
 from .schemas import ExportPayload, FitPayload, ModelComparisonPayload, PreviewPayload
 from .xps_routes import router as xps_router
 from .multipeak_routes import router as multipeak_router
+from .result_import.routes import router as result_import_router
+from .calculations.routes import router as calculations_router
 from .peak_properties import geometry_rows
 
 
@@ -322,6 +324,8 @@ def export(payload: ExportPayload) -> Response:
 
 app.include_router(xps_router)
 app.include_router(multipeak_router)
+app.include_router(result_import_router)
+app.include_router(calculations_router)
 
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 if frontend_dist.exists():

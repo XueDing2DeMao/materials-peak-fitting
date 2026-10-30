@@ -1,0 +1,62 @@
+/* 只约束导入阶段；顶栏按实际高度分配，底栏占据独立布局行。 */
+.analysis-workbench.is-batch-import{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding-bottom:10px}
+.is-batch-import>.workbench-header,.is-batch-import>.workflow-description{flex:none}
+.is-batch-import>#workspace-content{flex:1;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.analysis-workbench .batch-workbench.is-import-workbench{display:flex;flex:1;flex-direction:column;min-height:0;min-width:0;overflow:hidden;margin-top:4px;gap:10px}
+.analysis-workbench .is-import-workbench>.batch-header{flex:none;padding:10px 14px}
+.analysis-workbench .is-import-workbench .batch-flow{margin:8px 0 0;gap:8px}
+.analysis-workbench .is-import-workbench .batch-flow button{padding:6px 10px;min-height:44px}
+.is-import-workbench .batch-header>.hint,.is-import-workbench .batch-progress{display:none}
+.is-import-workbench .batch-header>[role=alert],.is-import-workbench .batch-header>[role=status]{margin:6px 0 0;max-height:64px;overflow:auto;font-size:12px}
+.is-import-workbench .setup-stage{flex:1;min-height:0;min-width:0;overflow:hidden}
+.setup-root{height:100%;margin:0;border:0;padding:0}.setup-root>summary{display:none}
+.setup-workspace{height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0}
+.setup-grid{position:relative;display:grid;grid-template-columns:minmax(0,1.85fr) minmax(330px,1fr);gap:12px;flex:1;min-height:0;min-width:0;overflow:hidden}
+.analysis-workbench .setup-data,.analysis-workbench .setup-config{padding:0;margin:0;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;border:1px solid var(--ui-border);border-radius:8px;background:var(--ui-surface)}
+.setup-data-header,.setup-config-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;padding:14px 16px;border-bottom:1px solid var(--ui-border)}
+.setup-data-header h3,.setup-config-header h3{margin:0;font-size:15px}.setup-data-header .hint{margin:5px 0 0;font-size:12px}.setup-data-header>div{min-width:0}.setup-data-header>button{flex:none}
+.setup-data.is-dragging,.setup-empty.is-dragging{outline:2px dashed var(--ui-primary);outline-offset:-5px;background:var(--ui-selected)}
+.setup-message{margin:8px 16px 0;font-size:12px}.setup-data .selection-launcher{margin:8px 16px;padding:10px 12px;flex:none}.setup-data .selection-launcher strong{font-size:13px}
+.setup-empty{flex:1;min-height:0;margin:16px;border:1px dashed var(--ui-border-strong);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:16px;background:var(--ui-subtle)}
+.setup-empty svg{width:44px;height:44px;color:var(--ui-primary)}.setup-empty h3{margin:0;font-size:17px}.setup-empty p{font-size:13px;margin:0;color:var(--ui-text-muted)}
+.setup-data .batch-order-controls{flex:none;display:flex;align-items:center;gap:8px;margin:10px 16px}.setup-data .batch-order-controls label{display:flex;align-items:center;gap:8px;margin:0;font-size:12px}.setup-data .batch-order-controls select{width:180px;height:32px}.setup-data .batch-order-controls button{height:32px;font-size:12px}
+.setup-data .batch-order-preview{flex:none;max-height:190px;overflow:auto;margin:0 16px 8px;padding:8px;background:var(--ui-subtle);border:1px solid var(--ui-border)}
+.analysis-workbench .setup-data .batch-input-table{flex:1;min-height:0;max-height:none;overflow:auto;margin:0 16px;border-radius:6px;scrollbar-gutter:stable;overscroll-behavior:contain}
+.setup-data .batch-input-table table{width:100%;min-width:690px;table-layout:fixed;margin:0;border-collapse:collapse}
+.setup-data .batch-input-table th,.setup-data .batch-input-table td{padding:9px 6px;font-size:12px;vertical-align:middle;text-align:left;position:static}
+.setup-data .batch-input-table thead th{position:sticky;top:0;z-index:1;background:var(--ui-subtle);font-weight:500;white-space:nowrap}
+.setup-col-include{width:42px}.setup-col-order{width:42px}.setup-col-source{width:25%}.setup-col-mapping{width:17%}.setup-col-status{width:100px}.setup-col-move{width:70px}
+.setup-filename{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;line-height:1.5}.setup-data small.setup-filename{font-size:11px;font-weight:400;color:var(--ui-text-muted);margin-top:3px}
+.setup-data .batch-input-table select{width:100%;min-width:0;height:32px;font-size:12px;text-overflow:ellipsis;padding:4px}
+.setup-mapping-state{font-size:11px;color:var(--ui-text-muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.setup-mapping-state.has-error{color:var(--ui-danger)}
+.setup-data .setup-move{white-space:nowrap}.setup-data .setup-move button{width:28px;height:30px;padding:0;margin:0 2px 0 0}
+.setup-data .is-excluded{background:var(--ui-subtle);color:var(--ui-text-muted)}.setup-sequence{font-variant-numeric:tabular-nums}
+.setup-list-note{flex:none;font-size:11px;margin:8px 16px 12px}
+.setup-config-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:14px 16px}
+.analysis-workbench .setup-config-fields{border:0;padding:0;margin:0;min-width:0}
+.analysis-workbench .setup-config .batch-template-card{display:block;padding:0 0 12px;border-bottom:1px solid var(--ui-border);font-size:13px}.analysis-workbench .setup-config .batch-template-card .hint{font-size:12px;margin:5px 0}.analysis-workbench .setup-config .batch-template-card .xps-actions{margin:8px 0 0;gap:8px}.analysis-workbench .setup-config .batch-template-card button{font-size:12px;height:30px;padding:0 10px}
+.setup-range{margin:12px 0;display:grid;gap:8px;font-size:12px}.setup-range>div{display:flex;justify-content:space-between;gap:12px}.setup-range dt{color:var(--ui-text-muted)}.setup-range dd{margin:0;font-variant-numeric:tabular-nums}
+.analysis-workbench .setup-config .batch-import-options{display:flex;flex-direction:column;gap:8px;margin:0}.analysis-workbench .setup-config .batch-strategy{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0;font-size:13px}.analysis-workbench .setup-config .batch-strategy select{max-width:200px;width:60%;height:34px}.analysis-workbench .setup-config .hint{font-size:12px;line-height:1.6;margin:8px 0}
+.analysis-workbench .setup-config .confirmation-callout{padding:10px 12px;margin:10px 0;font-size:12px}.analysis-workbench .setup-config .confirmation-status{font-size:12px}.analysis-workbench .setup-config .xps-check{font-size:12px;align-items:flex-start;gap:8px}.analysis-workbench .setup-config .xps-check input{flex-shrink:0}.analysis-workbench .setup-config .confirmation-hint{font-size:11px;margin:4px 0 0}
+.analysis-workbench .setup-config .batch-metadata{margin-top:14px;padding-top:12px;border-top:1px solid var(--ui-border)}.analysis-workbench .setup-config .batch-metadata summary{font-size:12px;line-height:1.6}
+/* 复用实验记录表的绑定，窄配置栏将每条记录排为表单卡。 */
+.analysis-workbench .setup-config .batch-metadata fieldset{border:0;padding:0;min-width:0}.analysis-workbench .setup-config .batch-metadata .batch-trend-controls{display:flex;flex-wrap:wrap;gap:8px}.analysis-workbench .setup-config .batch-metadata .batch-trend-controls label{flex:1;min-width:100px;margin:0;font-size:12px}.analysis-workbench .setup-config .batch-metadata input{min-width:0;width:100%;height:30px;font-size:12px}.analysis-workbench .setup-config .batch-metadata button{height:auto;min-height:32px;font-size:12px;white-space:normal}
+.analysis-workbench .setup-config .batch-metadata .batch-table-scroll{overflow:visible;max-height:none}.analysis-workbench .setup-config .batch-metadata table,.analysis-workbench .setup-config .batch-metadata tbody{display:block;width:100%;min-width:0}.analysis-workbench .setup-config .batch-metadata thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.analysis-workbench .setup-config .batch-metadata tbody tr{display:grid;grid-template-columns:1fr 1fr;gap:8px;border:1px solid var(--ui-border);border-radius:6px;padding:10px;margin:10px 0;background:var(--ui-subtle)}.analysis-workbench .setup-config .batch-metadata tbody th{grid-column:1/-1;position:static;overflow-wrap:anywhere;font-size:12px;padding:0;border:0}.analysis-workbench .setup-config .batch-metadata td{display:block;border:0;padding:0;min-width:0}.analysis-workbench .setup-config .batch-metadata td:before{display:block;font-size:11px;color:var(--ui-text-muted);margin-bottom:4px}.analysis-workbench .setup-config .batch-metadata td:nth-child(2):before{content:'样品编号'}.analysis-workbench .setup-config .batch-metadata td:nth-child(3):before{content:'条件名称'}.analysis-workbench .setup-config .batch-metadata td:nth-child(4):before{content:'条件值'}.analysis-workbench .setup-config .batch-metadata td:nth-child(5):before{content:'单位'}.analysis-workbench .setup-config .batch-metadata td:nth-child(6):before{content:'重复编号'}
+.analysis-workbench .setup-footer{flex:none;display:flex;align-items:center;gap:12px;padding:12px 16px;margin:0;min-width:0}.setup-footer-status{flex:1;min-width:0}.setup-footer strong{font-size:13px}.setup-footer strong .hint{font-weight:400;margin-left:12px;font-size:12px}.setup-footer p{font-size:12px;margin:5px 0}.setup-footer small{font-size:11px;color:var(--ui-text-muted)}.setup-footer>button{flex:none}.setup-config-toggle{display:none}
+@media(min-width:1151px) and (max-height:800px){
+  .setup-data-header,.setup-config-header{padding:10px 14px}
+  .setup-config-scroll{padding:10px 14px}
+  .analysis-workbench .setup-config .batch-template-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding-bottom:8px}
+  .analysis-workbench .setup-config .batch-template-card .xps-actions{display:flex;flex-direction:column;gap:4px;margin:0}
+  .analysis-workbench .setup-config .batch-template-card button{height:26px}
+  .setup-range{margin:8px 0;gap:4px}
+  .analysis-workbench .setup-config .batch-import-options{gap:0}
+  .analysis-workbench .setup-config .batch-import-options .hint{margin:4px 0}
+  .analysis-workbench .setup-config .confirmation-callout{padding:8px;margin:8px 0}
+  .analysis-workbench .setup-config .confirmation-callout:not(:has(#batch-fixed-hint))>.confirmation-status{display:none}
+  .analysis-workbench .setup-config .confirmation-hint{margin:2px 0 0}
+  .analysis-workbench .setup-config .batch-metadata{margin-top:8px;padding-top:8px}
+}
+@media(max-width:1150px){.setup-grid{grid-template-columns:minmax(0,1fr)}.setup-grid>.setup-config{display:none}.setup-grid.is-config-open>.setup-config{display:flex;position:absolute;inset:0 0 0 auto;width:min(430px,100%);z-index:5;box-shadow:-8px 0 24px #142b4920}.setup-config-toggle{display:inline-flex}.setup-config-header>.hint{display:none}.setup-footer strong .hint{display:block;margin-left:0;margin-top:4px}}
+@media(max-width:700px){.analysis-workbench.is-batch-import{padding:0 8px 8px}.is-batch-import .workflow-description{display:none}.analysis-workbench .is-import-workbench .batch-flow{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}.analysis-workbench .is-import-workbench .batch-flow button{padding:5px;min-height:48px;font-size:11px}.is-import-workbench .batch-flow small{display:none}.is-import-workbench .batch-flow button:last-child{grid-column:auto}.setup-data-header,.setup-config-header{padding:10px}.setup-data-header .hint{font-size:11px}.setup-empty{margin:10px;padding:10px;gap:8px}.setup-empty svg{display:none}.setup-empty h3{font-size:14px}.setup-empty p{font-size:11px}.setup-footer{flex-wrap:wrap}.setup-footer-status{flex-basis:100%}.setup-footer small{display:none}.setup-footer>button.primary{flex:1}.setup-list-note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}

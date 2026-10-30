@@ -247,7 +247,7 @@ html:has(.parameter-dialog[open]) { overflow: hidden; }
 .residual-heading>span { max-width: 300px; font-size: var(--ui-caption); color: var(--ui-text-muted); }
 .xps-range-readout { padding: var(--ui-space-3); border: 1px solid var(--ui-border); border-radius: var(--ui-control-radius); }
 .xps-range-readout span { display: block; font-size: var(--ui-caption); color: var(--ui-text-muted); margin-top: var(--ui-space-1); }
-.range-selection-guide { position: absolute; z-index: 4; right: 12px; bottom: 12px; left: 12px; display: grid; gap: var(--ui-space-1); padding: var(--ui-space-3); background: var(--ui-surface); border: 1px solid var(--ui-border-strong); border-radius: var(--ui-control-radius); pointer-events: none; font-size: var(--ui-caption); }
+.range-selection-guide { font-size: var(--ui-caption); color: var(--ui-text-muted); }
 /* 区间边界属于图形语义，保留与图上端点一致的颜色。 */
 .range-manipulator { position: absolute; z-index: 3; pointer-events: none; min-width: 2px; }
 .range-manipulator-tint { position: absolute; inset: 0; border-left: 2px solid #087b79; border-right: 2px solid #236a9a; background: rgba(6,109,106,.10); }

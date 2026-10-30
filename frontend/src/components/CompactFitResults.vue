@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import FitReviewActions from "./FitReviewActions.vue";
+import PeakDiagnosticLinks from "./PeakDiagnosticLinks.vue";
+import PeakQuickSummary from "./PeakQuickSummary.vue";
 import { computed, ref, watch } from 'vue';
 import PeakResultTable from './PeakResultTable.vue';
 import SamplingDiagnostics from './SamplingDiagnostics.vue';
@@ -6,8 +9,8 @@ import { presentPeaks } from '../resultPresentation';
 import { resultDiagnostics } from '../resultDiagnostics';
 import type { MultiResult } from '../multipeakTypes';
 import type { XpsResult } from '../xpsTypes';
-const props=defineProps<{result:MultiResult|XpsResult|null;hideActions?:boolean;stale:boolean;busy:boolean;unit:string;prefix:'multi'|'xps';accepted?:boolean;selectedPeak?:string}>();
-const emit=defineEmits<{export:[kind:'curves'|'parameters'|'configuration'];image:[];select:[id:string]}>();
+const props=defineProps<{locatable?:boolean;result:MultiResult|XpsResult|null;hideActions?:boolean;stale:boolean;busy:boolean;unit:string;prefix:'multi'|'xps';accepted?:boolean;selectedPeak?:string}>();
+const emit=defineEmits<{navigate:[target:'baseline'|'peaks'|'chart'|'diagnostics'];locate:[id:string,parameter:string];export:[kind:'curves'|'parameters'|'configuration'];image:[];select:[id:string]}>();
 const exportMenu=ref<HTMLDetailsElement|null>(null);
 watch(()=>props.result,()=>{if(exportMenu.value)exportMenu.value.open=false;});
 const number=(v:number|null|undefined)=>v==null||!Number.isFinite(v)?'—':Number(v.toPrecision(6)).toString();
@@ -27,7 +30,7 @@ function download(kind:'curves'|'parameters'|'configuration'|'image'){
   <section class="panel xps-results compact-fit-results">
     <div class="panel-title compact-result-heading">
       <h2>拟合结果</h2>
-      <details v-if="result&&!hideActions" ref="exportMenu" class="result-export-menu" data-test="result-export-menu">
+      <details v-if="result&&!hideActions" ref="exportMenu" class="result-export-menu" data-result-section="archive" data-test="result-export-menu">
         <summary>导出</summary>
         <div class="result-export-options">
           <button :disabled="stale||busy" @click="download('curves')" :data-test="`${prefix}-export-curves`">曲线 CSV</button>
@@ -47,7 +50,7 @@ function download(kind:'curves'|'parameters'|'configuration'|'image'){
         <span>RMSE <b>{{number(result.statistics.rmse)}}</b></span>
       </div>
       <p class="result-diagnostic-state" role="status">诊断：{{diagnosis.diagnostic}} · 人工状态：{{diagnosis.review}}</p><p class="hint">收敛不等于模型适用。</p>
-      <details v-if="diagnosis.notes.length" class="result-details"><summary>计算口径</summary><p v-for="note in diagnosis.notes" :key="note" class="hint">{{note}}</p></details>
+      <details v-if="diagnosis.notes.length" class="result-details" data-result-section="diagnostics"><summary>计算口径</summary><p v-for="note in diagnosis.notes" :key="note" class="hint">{{note}}</p></details>
       <details v-if="warningTags.length" class="compact-result-warnings" data-test="result-warnings">
         <summary data-test="result-warning-summary"><span>⚠ 需要复核</span><span v-for="tag in warningTags" :key="tag" class="result-warning-tag">{{tag}}</span><span class="warning-detail-label">展开详情</span></summary>
         <ul v-if="warnings.length"><li v-for="warning in warnings" :key="warning">{{warning}}</li></ul>
@@ -56,13 +59,13 @@ function download(kind:'curves'|'parameters'|'configuration'|'image'){
         <p v-if="!result.diagnostics.uncertainty_available">部分标准误不可用，请展开对应峰查看参数原因。</p>
         <p v-for="pair in result.diagnostics.strong_correlations" :key="pair.a+pair.b">{{pair.a}} / {{pair.b}}：{{number(pair.correlation)}}</p>
       </details>
-      <PeakResultTable :peaks="peaks" :unit="unit" :stale="stale" :selected-peak="selectedPeak" @select="emit('select',$event)" />
-      <SamplingDiagnostics :x="result.x??[]" :peaks="peaks" :unit="unit" :xrd="result.configuration&&'analysis_mode' in result.configuration&&result.configuration.analysis_mode==='xrd'" />
-      <details v-if="result.groups.length" class="result-details">
+      <FitReviewActions v-if="locatable" :result="result" :stale="stale" :busy="busy" @navigate="emit('navigate',$event)" /><PeakDiagnosticLinks v-if="locatable" :busy="busy" :peaks="peaks" :correlations="result.diagnostics.strong_correlations" :stale="stale" @locate="(id,parameter)=>emit('locate',id,parameter)" /><PeakQuickSummary :busy="busy" v-if="locatable" :peaks="peaks" :unit="unit" :stale="stale" :selected-peak="selectedPeak" @select="emit('locate',$event,'')" /><div data-result-section="results"><PeakResultTable :peaks="peaks" :unit="unit" :stale="stale" :selected-peak="selectedPeak" @select="emit('select',$event)" /></div>
+      <SamplingDiagnostics data-result-section="diagnostics" :x="result.x??[]" :peaks="peaks" :unit="unit" :xrd="result.configuration&&'analysis_mode' in result.configuration&&result.configuration.analysis_mode==='xrd'" />
+      <details v-if="result.groups.length" class="result-details" data-result-section="results">
         <summary>峰组汇总（{{result.groups.length}}）</summary>
         <div class="compact-result-table"><table><thead><tr><th>峰组</th><th>全域面积 / Y × {{unit}}</th><th>区间面积 / Y × {{unit}}</th><th>区间面积占比</th></tr></thead><tbody><tr v-for="g in result.groups" :key="g.id"><th>{{g.id}} · {{g.label}}</th><td>{{number(g.area_total)}}</td><td>{{number(g.area_window)}}</td><td>{{percent(g.area_fraction_window)}}</td></tr></tbody></table></div>
       </details>
-      <details class="result-details" data-test="result-statistics">
+      <details class="result-details" data-result-section="diagnostics" data-test="result-statistics">
         <summary>统计与求解详情</summary>
         <div class="xps-status"><span>{{result.diagnostics.identifiable?'数值满秩':'不可独立辨识'}}</span><span>{{result.diagnostics.uncertainty_available?'条件标准误可用':'部分标准误不可用'}}</span></div>
         <p class="hint">{{result.message}}（{{result.evaluations}} 次求值）</p>

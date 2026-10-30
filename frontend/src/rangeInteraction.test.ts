@@ -14,7 +14,11 @@ describe.each(['multi','xps'] as const)('%s 复用单峰范围交互',kind=>{
   it('默认平移，框选按数据点更新并自动退出，双击恢复手柄',async()=>{
     const w=chart();await flushPromises();const node=w.get(`[data-test="${kind==='multi'?'multi':'xps'}-plot"]`).element as any;
     expect(w.get('[data-test="range-selection-toggle"]').attributes('aria-pressed')).toBe('false');
+    await w.get('.compact-chart-tools-toggle').trigger('click');
     await w.get('[data-test="range-selection-toggle"]').trigger('click');await flushPromises();
+    expect(w.find('.chart-canvas [data-test="range-selection-guide"]').exists()).toBe(false);
+    expect(w.get('.chart-mode-status [data-test="range-selection-guide"]').text()).toContain('水平拖动');
+    expect(w.get('.compact-chart-tools-toggle').attributes('aria-expanded')).toBe('false');
     node.events.plotly_selected({points:[{x:6},{x:2},{x:4}]});await flushPromises();
     expect(w.emitted('range')?.at(-1)).toEqual([{start:2,end:6}]);
     expect(w.get('[data-test="range-selection-toggle"]').attributes('aria-pressed')).toBe('false');
@@ -22,7 +26,7 @@ describe.each(['multi','xps'] as const)('%s 复用单峰范围交互',kind=>{
     expect(w.find('[data-test="range-start-handle"]').exists()).toBe(true);
   });
   it('边界拖动保持起终点语义，整体平移限于数据范围，Esc收起手柄',async()=>{
-    const w=chart();await w.get('[data-test="range-edit-toggle"]').trigger('click');await flushPromises();
+    const w=chart();await w.get('[data-test="spectrum-full"]').trigger('click');await w.get('[data-test="range-edit-toggle"]').trigger('click');await flushPromises();
     const reverse=kind==='xps';
     pointer(w.get('[data-test="range-start-handle"]').element,'pointerdown',reverse?450:150);
     pointer(window,'pointermove',reverse?400:200);pointer(window,'pointerup',reverse?400:200);

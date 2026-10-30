@@ -72,26 +72,26 @@ describe('单谱多峰工作区',()=>{
     expect((w.get('[data-test="multi-fit"]').element as HTMLButtonElement).disabled).toBe(true);
     expect(w.get('[data-test="multi-fit-blocker"]').text()).toContain('预览基线');
     vi.mocked(api.previewMulti).mockResolvedValue({x:[0,1,2,3,4],raw_y:[0,1,5,1,0],baseline:[0,0,0,0,0],baseline_configuration:{...createMultiConfig([],[],null,'general').baseline,resolved_anchors:[]}});
-    await w.get('[data-test="multi-preview-next"]').trigger('click');await flushPromises();
+    await w.get('[data-test="multi-preview"]').trigger('click');await flushPromises();
     expect(api.fitMulti).not.toHaveBeenCalled();
     expect((w.get('[data-test="multi-fit"]').element as HTMLButtonElement).disabled).toBe(true);
     expect(w.get('[data-test="multi-fit-blocker"]').text()).toContain('复核');
-    await w.get('[data-test="multi-confirm-next"]').trigger('click');
+    await w.get('[data-test="multi-confirm"]').setValue(true);
     expect((w.get('[data-test="multi-confirm"]').element as HTMLInputElement).checked).toBe(true);
     expect((w.get('[data-test="multi-fit"]').element as HTMLButtonElement).disabled).toBe(false);
     expect(w.find('[data-test="multi-fit-blocker"]').exists()).toBe(false);
     await w.get('[data-test="multi-range-start"]').setValue(.5);
     expect((w.get('[data-test="multi-confirm"]').element as HTMLInputElement).checked).toBe(false);
-    expect(w.find('[data-test="multi-preview-next"]').exists()).toBe(true);
+    expect(w.find('[data-test="multi-preview"]').exists()).toBe(true);
   });
   it('预览失败时保留预览入口，不能跳过复核直接拟合',async()=>{
     const w=workbench();await w.get('[data-test="multi-add"]').trigger('click');
     vi.mocked(api.previewMulti).mockRejectedValueOnce(new Error('基线锚点不足'));
-    await w.get('[data-test="multi-preview-next"]').trigger('click');await flushPromises();
+    await w.get('[data-test="multi-preview"]').trigger('click');await flushPromises();
     expect(w.get('[role="alert"]').text()).toContain('基线锚点不足');
-    expect(w.find('[data-test="multi-confirm-next"]').exists()).toBe(false);
+    expect((w.get('[data-test="multi-confirm"]').element as HTMLInputElement).disabled).toBe(true);
     expect((w.get('[data-test="multi-fit"]').element as HTMLButtonElement).disabled).toBe(true);
-    expect((w.get('[data-test="multi-preview-next"]').element as HTMLButtonElement).disabled).toBe(false);
+    expect((w.get('[data-test="multi-preview"]').element as HTMLButtonElement).disabled).toBe(false);
   });
   it('缺少谱线或启用峰时说明原因，无基线时无需复核',async()=>{
     const w=workbench();

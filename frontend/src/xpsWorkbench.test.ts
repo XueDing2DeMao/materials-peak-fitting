@@ -6,6 +6,7 @@ import Plotly from "plotly.js-dist-min";
 import App from "./App.vue";
 import DatasetSummary from "./components/DatasetSummary.vue";
 import * as api from "./xpsApi";
+import * as files from "./resultExport";
 import * as single from "./api";
 import { createConfig, makeDoublet } from "./xpsState";
 vi.mock("plotly.js-dist-min",()=>({default:{react:vi.fn((el:any)=>{el.on=vi.fn();el.removeAllListeners=vi.fn();return Promise.resolve();}),purge:vi.fn(),downloadImage:vi.fn()}}));
@@ -20,8 +21,40 @@ function workbench(){const w=mount(XpsWorkbench,{props:{x,y,source}});mounted.pu
 beforeEach(()=>{
 Object.defineProperty(HTMLDialogElement.prototype,"showModal",{configurable:true,writable:true,value:function(){this.setAttribute("open","");}});
 Object.defineProperty(HTMLDialogElement.prototype,"close",{configurable:true,writable:true,value:function(){this.removeAttribute("open");this.dispatchEvent(new Event("close"));}});vi.clearAllMocks();vi.mocked(api.fitXps).mockResolvedValue(result);vi.mocked(api.previewXps).mockResolvedValue(preview);});
-afterEach(()=>mounted.splice(0).forEach(w=>w.unmount()));
+afterEach(()=>{mounted.splice(0).forEach(w=>w.unmount());vi.restoreAllMocks();});
 describe("XPS 页面行为",()=>{
+  it('导出当前结果不重新求解，失败后可重试且反馈真实',async()=>{
+    const save=vi.spyOn(files,'saveFile').mockImplementationOnce(()=>{throw new Error('下载不可用');}).mockImplementation(()=>{});
+    const fitted={...result,configuration:createConfig(x,y,source),net_total:y.map(v=>v-1)};
+    vi.mocked(api.fitXps).mockResolvedValue(fitted);
+    const w=workbench();await w.get('[data-test="xps-add"]').trigger('click');
+    await w.get('[data-test="xps-fit"]').trigger('click');await flushPromises();
+    await w.get('[data-test="xps-export-config"]').trigger('click');await flushPromises();
+    expect(w.get('[role="alert"]').text()).toContain('下载不可用');
+    expect(w.text()).not.toContain('已发起');
+    await w.get('[data-test="xps-export-config"]').trigger('click');await flushPromises();
+    expect(w.find('[role="alert"]').exists()).toBe(false);expect(w.text()).toContain('已发起');
+    expect(JSON.parse(save.mock.calls[1][1]).result).toEqual(fitted);
+    expect(api.fitXps).toHaveBeenCalledTimes(1);expect(api.exportXps).not.toHaveBeenCalled();
+  });
+  it('结果视图切换保留峰参数与图谱，预览仍须人工复核',async()=>{
+    const w=workbench();
+    await w.get('[data-test="xps-add"]').trigger('click');
+    const config=w.getComponent(XpsFitControls).props('config');
+    config.components[0].parameters.A!.value=42;
+    await w.get('[data-test="xps-background"]').setValue('shirley');
+    await w.get('[data-test="xps-preview"]').trigger('click');await flushPromises();
+    expect(config.background.confirmed).toBe(false);
+    const plot=w.get('[data-test="xps-plot"]').element;
+    await w.get('[data-test="result-view-diagnostics"]').trigger('click');
+    await w.get('[data-test="result-view-archive"]').trigger('click');
+    await w.get('[data-test="result-view-results"]').trigger('click');
+    expect(w.get('[data-test="xps-plot"]').element).toBe(plot);
+    expect(w.getComponent(XpsFitControls).props('config')).toBe(config);
+    expect(config.components[0].parameters.A!.value).toBe(42);
+    expect(config.background.confirmed).toBe(false);
+    expect(api.fitXps).not.toHaveBeenCalled();
+  });
   it('手动背景水平和自定义窗口保持可见，恢复默认后可折叠',async()=>{
     const w=workbench(),config=w.getComponent(XpsFitControls).props('config');
     const details=()=>w.get('[data-test="xps-background-details"]');
@@ -50,7 +83,7 @@ describe("XPS 页面行为",()=>{
     const w=workbench();await w.get('[data-test="xps-add"]').trigger('click');await flushPromises();
     const plot=w.get('[data-test="xps-plot"]').element;
     const layout=()=>vi.mocked(Plotly.react).mock.calls.filter((call:unknown[])=>call[0]===plot).at(-1)![2] as any;
-    expect(layout().xaxis.autorange).toBe('reversed');
+    expect(layout().xaxis.autorange).toBe(false);expect(layout().xaxis.range[0]).toBeGreaterThan(layout().xaxis.range[1]);
     expect(layout().annotations[0]).toMatchObject({x:100,text:'p1<br>100 eV'});
     await w.findAll('label').find(label=>label.text()==='启用此峰')!.get('input').setValue(false);await flushPromises();
     expect(layout().annotations).toEqual([]);

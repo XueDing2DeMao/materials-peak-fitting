@@ -8,8 +8,9 @@ import type { BatchRequest, BatchResult } from '../batchTypes';
 import type { MultiPreview } from '../multipeakTypes';
 import type { XpsPreview } from '../xpsTypes';
 
-const props=defineProps<{request:BatchRequest;preview:MultiPreview|XpsPreview;result:BatchResult|null;selectedPeak:string}>();
+const props=defineProps<{request:BatchRequest;preview:MultiPreview|XpsPreview;result:BatchResult|null;selectedPeak:string;fill?:boolean}>();
 const plot=ref<HTMLElement|null>(null),full=ref(false),expanded=ref(false),error=ref('');
+const container=ref<HTMLElement|null>(null),resetVersion=ref(0);
 const chartHeight=computed(()=>expanded.value?760:props.result?490:350);
 const xps=computed(()=>!isMulti(props.request));
 const xLabel=computed(()=>xps.value?'结合能 / eV':isMulti(props.request)&&props.request.analysis_mode==='xrd'?'2θ / °':'X（原数据单位）');
@@ -31,6 +32,8 @@ function intensityRange(traces:Record<string,unknown>[],start:number,end:number)
 }
 async function draw(){
   if(!plot.value||disposed)return;
+  const width=container.value?.clientWidth??0,height=props.fill?container.value?.clientHeight??0:chartHeight.value;
+  if(width<=0||height<=0)return;
   if(drawing){redraw=true;return;}
   const node=plot.value;
   drawing=true;
@@ -53,11 +56,11 @@ async function draw(){
         xaxis:'x2',yaxis:'y2',showlegend:false,line:{color:FIGURE_COLORS.residual,width:1},marker:{size:3,color:FIGURE_COLORS.residual}});
     }
     const yRange=intensityRange(traces,Math.min(...range),Math.max(...range));
-    const narrow=plot.value.clientWidth<600;
+    const narrow=width<600;
     await Plotly.react(plot.value,traces,{
-      ...figureLayout(plot.value.clientWidth),height:chartHeight.value,
-      margin:{l:narrow?64:78,r:20,t:narrow?115:70,b:55},dragmode:'pan',
-      uirevision:`${full.value}:${request.range_start}:${request.range_end}:${Boolean(result)}`,
+      ...figureLayout(width),width,height,autosize:false,
+      margin:{l:narrow?64:78,r:20,t:props.fill?48:narrow?115:70,b:55},dragmode:'pan',
+      uirevision:`${full.value}:${request.range_start}:${request.range_end}:${Boolean(result)}:${resetVersion.value}`,
       xaxis:{...figureAxis(result?'':xLabel.value),range,autorange:false,anchor:'y',showticklabels:!result},
       yaxis:{...figureAxis('强度（原数据单位）'),domain:result?[.3,1]:[0,1],range:yRange,autorange:!yRange},
       ...(result?{
@@ -79,23 +82,25 @@ async function download(){
   try{await Plotly.downloadImage(plot.value,{format:'png',filename:'batch-spectrum',width:1400,height:900,scale:2});}
   catch(e){error.value=`图片导出失败：${e instanceof Error?e.message:String(e)}`;}
 }
-watch(()=>[props.request,props.preview,props.result,props.selectedPeak,full.value,expanded.value],()=>nextTick(draw));
+watch(()=>[props.request,props.preview,props.result,props.selectedPeak,props.fill,full.value,expanded.value,resetVersion.value],()=>nextTick(draw));
 onMounted(()=>{
   void draw();
-  if(typeof ResizeObserver!=='undefined'&&plot.value){
-    let width=0;observer=new ResizeObserver(entries=>{const next=entries[0]?.contentRect.width??0;if(next>0&&next!==width){width=next;void nextTick(draw);}});observer.observe(plot.value);
+  if(typeof ResizeObserver!=='undefined'&&container.value){
+    let width=container.value.clientWidth,height=container.value.clientHeight;
+    observer=new ResizeObserver(entries=>{const size=entries[0]?.contentRect;if(!size)return;if(size.width!==width||size.height!==height){width=size.width;height=size.height;void nextTick(draw);}});observer.observe(container.value);
   }
 });
 onBeforeUnmount(()=>{disposed=true;observer?.disconnect();if(plot.value&&!drawing)Plotly.purge(plot.value);});
 </script>
 
 <template>
-  <section class="panel batch-chart" aria-label="当前谱线图表">
+  <section class="panel batch-chart" :class="{'batch-chart-fill':fill,'is-expanded':fill&&expanded}" aria-label="当前谱线图表" @keydown.esc="expanded=false">
     <div class="batch-chart-toolbar">
       <h3>{{result?'拟合曲线与残差':'原谱与背景预览'}}</h3>
       <div class="xps-actions">
         <button :aria-pressed="!full" @click="full=false">拟合区间</button>
         <button :aria-pressed="full" @click="full=true" data-test="batch-chart-full">全谱</button>
+        <button @click="resetVersion++" data-test="batch-chart-reset">复位</button>
         <button :aria-pressed="expanded" @click="expanded=!expanded">{{expanded?'收起图表':'放大图表'}}</button>
         <button @click="download">谱图 PNG</button>
       </div>
@@ -103,12 +108,13 @@ onBeforeUnmount(()=>{disposed=true;observer?.disconnect();if(plot.value&&!drawin
     <p v-if="!result" class="hint">待拟合 · 当前显示原谱与预检背景</p>
     <p v-else class="hint">总拟合 = 背景 + 各净峰 · 残差 = 实测 − 拟合</p>
     <p v-if="error" role="alert" class="error">{{error}}</p>
-    <div ref="plot" data-test="batch-plot" class="batch-plot" :style="{height:`${chartHeight}px`}" :aria-label="result?'拟合曲线与残差图':'原谱与背景图'"/>
+    <div ref="container" class="batch-plot-container" :style="fill?undefined:{height:`${chartHeight}px`}"><div ref="plot" data-test="batch-plot" class="batch-plot" :style="{height:fill?'100%':`${chartHeight}px`}" :aria-label="result?'拟合曲线与残差图':'原谱与背景图'"/></div>
   </section>
 </template>
 
 <style scoped>
 .batch-chart-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.batch-chart h3{margin:0}.batch-plot{width:100%;min-width:0;margin-top:32px}.batch-chart-toolbar .xps-actions{margin:0}
+.batch-chart h3{margin:0}.batch-plot{width:100%;min-width:0}.batch-plot-container{width:100%;min-width:0;margin-top:32px}.batch-chart-toolbar .xps-actions{margin:0}
+.batch-chart-fill{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;padding:12px;overflow:hidden}.batch-chart-fill .batch-plot-container{flex:1;min-height:0;margin-top:4px;overflow:hidden}.batch-chart-fill .batch-chart-toolbar{flex:none;gap:8px}.batch-chart-fill h3{font-size:13px}.batch-chart-fill .hint{margin:4px 0;font-size:12px}.batch-chart-fill button{height:30px;font-size:12px;padding:0 8px}.batch-chart-fill .xps-actions{gap:4px}.batch-chart-fill.is-expanded{position:fixed;inset:16px;z-index:100;box-shadow:0 0 0 100vmax #172b4670}.batch-chart-fill .error{flex:none}
 button[aria-pressed=true]{background:var(--ui-selected);border-color:var(--ui-text)}
 </style>

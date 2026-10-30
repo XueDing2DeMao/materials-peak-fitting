@@ -368,7 +368,7 @@ describe("数据与拟合生命周期", () => {
     const wrapper = await loadedApp(), data = wrapper.getComponent(DatasetSummary);
     await data.get('select').setValue("second");
     expect(data.get(".dataset-file").text()).toContain("first");
-    expect(data.get(".dataset-file").text()).toContain("11 个有效点");
+    expect(data.get('[data-test="open-audit"]').text()).toContain("有效 11 点");
     await data.get('[data-test="cancel-selection"]').trigger("click");
     expect((data.get('select').element as HTMLSelectElement).value).toBe("first");
     await data.get('select').setValue("second");

@@ -20,6 +20,27 @@ vi.mocked(api.loadDatasetRows).mockImplementation(async(_id,name,offset=0,limit=
 afterEach(()=>{wrappers.splice(0).forEach(w=>w.unmount());vi.restoreAllMocks();});
 async function app(){const w=mount(App,{global:{stubs:{MultiPeakWorkbench:{name:'MultiPeakWorkbench',emits:['work'],props:['x','y','source'],template:'<div />'},XpsWorkbench:true,BatchWorkbench:true}}});wrappers.push(w);w.getComponent(DatasetSummary).vm.$emit('upload',new File(['x'],'Raman.xlsx'));await flushPromises();return w;}
 describe('导入数据核对',()=>{
+  it('清理详情直接展示行记录，切换标签保留列草稿且不会提交，关闭返回摘要入口',async()=>{
+    const selected={sheet:'Figure2bc',xColumn:'mean',yColumn:'error'};
+    const audit={version:1 as const,row_basis:'parsed_sheet_after_empty_rows_removed' as const,sheet_rows:3,valid_pairs:2,excluded_pairs:1,exclusion_reasons:{y_missing:1},excluded_rows:[{parsed_row:3,reasons:['y_missing']}],excluded_rows_truncated:false,source_rows:[1,2],sorting_changed:false,duplicate_x_count:1};
+    const d=mount(DatasetSummary,{attachTo:document.body,props:{dataset:workbook,appliedDataset:workbook,appliedSelection:selected,loading:false,audit}});wrappers.push(d);await flushPromises();
+    await d.get('[data-test="open-audit"]').trigger('click');await flushPromises();
+    expect(d.get('[data-test="dataset-tab-audit"]').attributes('aria-selected')).toBe('true');
+    expect(d.get('.audit-row-list').isVisible()).toBe(true);
+    expect(d.get('[data-test="apply-selection"]').isVisible()).toBe(false);
+    await d.get('[data-test="dataset-tab-data"]').trigger('click');await d.get('select').setValue('Bare Ge');
+    await d.get('[data-test="dataset-tab-audit"]').trigger('click');await d.get('[data-test="dataset-tab-data"]').trigger('click');
+    expect((d.get('select').element as HTMLSelectElement).value).toBe('Bare Ge');
+    expect(d.emitted('preview')).toBeUndefined();
+    await d.get('dialog').trigger('cancel');await flushPromises();
+    expect(document.activeElement).toBe(d.get('[data-test="open-audit"]').element);
+  });
+
+  it('没有审计记录时不把排除数显示为零',async()=>{
+    const d=mount(DatasetSummary,{props:{dataset:workbook,appliedDataset:workbook,appliedSelection:{sheet:'Figure2bc',xColumn:'mean',yColumn:'error'},loading:false}});wrappers.push(d);await flushPromises();
+    expect(d.get('[data-test="open-audit"]').text()).toContain('未提供');
+    expect(d.get('[data-test="open-audit"]').text()).not.toContain('排除 0');
+  });
   it('弹窗 Esc 取消草稿并返回查看入口，浏览不提交数据',async()=>{
     const selected={sheet:'Figure2bc',xColumn:'mean',yColumn:'error'};
     const d=mount(DatasetSummary,{attachTo:document.body,props:{dataset:workbook,appliedDataset:workbook,appliedSelection:selected,loading:false}});wrappers.push(d);await flushPromises();

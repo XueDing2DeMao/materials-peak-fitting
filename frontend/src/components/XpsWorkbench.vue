@@ -1,7 +1,14 @@
 <script setup lang="ts">
+import WorkbenchLayoutTools from './WorkbenchLayoutTools.vue';
+import WorkbenchSplitHandle from './WorkbenchSplitHandle.vue';
+import {useWorkbenchLayout} from '../useWorkbenchLayout';
+import WorkbenchViewNav from "./WorkbenchViewNav.vue";
+import { usePeakRemovalUndo } from "../usePeakRemovalUndo";
+import ResultWorkspace from "./ResultWorkspace.vue";
 import { confirmDiscard, useWorkProtection } from '../useWorkProtection';
-import { computed, ref, watch } from "vue";
-import { candidatesXps, exportXps, fitXps, previewXps } from "../xpsApi";
+import { computed, nextTick, ref, watch } from "vue";
+import { candidatesXps, fitXps, previewXps } from "../xpsApi";
+import { exportXpsResult } from "../xpsResultExport";
 import { removeComponent, addComponent, createConfig, loadConfiguration, RevisionGate, validateConstraints, requiredConfigVersion, shiftConfiguration } from "../xpsState";
 import type { Candidate, XpsPreview, XpsResult, XpsSource, XpsRequest } from "../xpsTypes";
 import { estimateClickedPeak } from "../chartPeakPick";
@@ -19,10 +26,35 @@ const props=defineProps<{x:number[];y:number[];source:XpsSource|null}>();
 const emit=defineEmits<{work:[dirty:boolean];template:[config:XpsRequest]}>();
 const config=ref(createConfig(props.x,props.y,props.source)),preview=ref<XpsPreview|null>(null),result=ref<XpsResult|null>(null),candidates=ref<Candidate[]>([]);
 const busy=ref(false),error=ref(""),stale=ref(false),notice=ref("");
-const controls=ref<{focusRangeEndpoint:(endpoint:'start'|'end')=>void}|null>(null);
+const controls=ref<{showSection:(section:'range'|'baseline'|'peaks')=>void;selectPeak:(id:string,parameter?:string)=>void;focusRangeEndpoint:(endpoint:'start'|'end')=>void}|null>(null);
 const chart=ref<{downloadImage:()=>void}|null>(null),fileInput=ref<HTMLInputElement|null>(null);
 const selectedPeak=ref(''),resultSection=ref<HTMLElement|null>(null);
-function viewResults(){resultSection.value?.scrollIntoView?.({block:'start',behavior:'smooth'});resultSection.value?.focus({preventScroll:true});}
+const resultViews=ref<{showResults:()=>void;showDiagnostics:()=>void;showArchive:()=>void}|null>(null);
+const activePane=ref<'chart'|'settings'|'results'>('chart');
+const resultsOpen=ref(false),resultTrigger=ref<HTMLButtonElement|null>(null);
+const {grid,stacked,chartExpanded,settingsWidth,resultWidth,settingsMax,resultMax,layoutStyle,setWidth,resetWidths}=useWorkbenchLayout(resultsOpen);
+async function toggleChart(){chartExpanded.value=!chartExpanded.value;if(chartExpanded.value)activePane.value='chart';await nextTick();(chartExpanded.value?document.getElementById('analysis-plot'):grid.value?.closest('.single-workbench')?.querySelector<HTMLElement>('[data-test="expand-chart"]'))?.focus({preventScroll:true});}
+function handleChartEscape(event:KeyboardEvent){if(chartExpanded.value&&!(event.target as HTMLElement)?.closest('dialog'))void toggleChart();}
+async function viewResults(){chartExpanded.value=false;activePane.value='results';resultsOpen.value=true;await nextTick();resultSection.value?.focus({preventScroll:true});}
+function handleResultsEscape(event:KeyboardEvent){if((event.target as HTMLElement)?.closest('dialog'))return;void closeResults();}
+async function closeResults(){resultsOpen.value=false;activePane.value='chart';await nextTick();(resultTrigger.value?.getClientRects().length?resultTrigger.value:document.getElementById('analysis-plot'))?.focus({preventScroll:true});}
+function locatePeak(id:string,parameter:string){if(stale.value||busy.value||scenarioBusy.value)return;void selectPeak(id,parameter);}
+async function selectPeak(id:string,parameter?:string){if(!config.value.components.some(c=>c.id===id))return;if(!parameter&&selectedPeak.value===id&&activePane.value==='settings'&&!resultsOpen.value)return;chartExpanded.value=false;activePane.value='settings';resultsOpen.value=false;selectedPeak.value=id;await nextTick();void controls.value?.selectPeak(id,parameter);}
+async function navigateView(view:'chart'|'settings'|'results'){
+ chartExpanded.value=false;
+ if(view==='results'){await viewResults();return;}
+ activePane.value=view;resultsOpen.value=false;await nextTick();
+ document.getElementById(view==='chart'?'analysis-plot':'analysis-settings')?.focus({preventScroll:true});
+}
+async function navigateReview(target:'baseline'|'peaks'|'chart'|'diagnostics'){
+ if(target==='diagnostics'){await viewResults();resultViews.value?.showDiagnostics();return;}
+ if(target==='chart'){await navigateView('chart');return;}
+ await navigateView('settings');await controls.value?.showSection(target);
+}
+async function focusRangeEndpoint(endpoint:'start'|'end'){await navigateView('settings');controls.value?.focusRangeEndpoint(endpoint);}
+
+const deletion=usePeakRemovalUndo(()=>config.value,removeComponent);
+function undoDelete(){if(busy.value||scenarioBusy.value)return;const id=deletion.undo();if(id){notice.value='已恢复 '+id+'；请重新拟合。';selectPeak(id);}}
 const initialWork=ref(JSON.stringify(config.value));
 const unsavedWork=computed(()=>busy.value||Boolean(result.value)||JSON.stringify(config.value)!==initialWork.value);
 watch(unsavedWork,dirty=>emit('work',dirty),{immediate:true});
@@ -51,8 +83,9 @@ async function action(kind:"preview"|"fit"|"candidates"){
   }catch(e){if(gate.current(token))error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}
 }
 function removeAt(id:string){
+  if(busy.value||scenarioBusy.value)return;
   error.value='';notice.value='';
-  try{removeComponent(config.value,id);notice.value=`已删除 ${id}，可继续左键添加或右键删除峰。`;}
+  try{deletion.remove(id);notice.value=`已删除 ${id}；继续编辑前可撤销。`;}
   catch(e){error.value=e instanceof Error?e.message:String(e);}
 }
 function addAt(x:number){
@@ -73,12 +106,13 @@ function calibrate(value:number){
   if(!Number.isFinite(value)){error.value="能量偏移必须是有限数值";return;}
   shiftConfiguration(config.value,value-config.value.shift_eV);
 }
-async function download(kind:"curves"|"parameters"|"configuration"){
-  if(!result.value||stale.value||busy.value)return;
-  const token=gate.start("export");busy.value=true;error.value="";
-  try{const blob=await exportXps(kind,snapshot());if(!gate.current(token)){notice.value="设置已变化，已取消过期导出。";return;}
-    const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=`xps-${kind}.${kind==="configuration"?"json":"csv"}`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
-  }catch(e){if(gate.current(token))error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}
+function download(kind:"curves"|"parameters"|"configuration"){
+  if(!result.value||stale.value||busy.value||scenarioBusy.value)return;
+  error.value="";notice.value="";
+  try{
+    exportXpsResult(kind,result.value);
+    notice.value="已发起当前结果的下载，请在浏览器下载列表中查看。";
+  }catch(e){error.value='导出失败：'+(e instanceof Error?e.message:String(e));}
 }
 async function load(event:Event){
   const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file)return;
@@ -96,18 +130,21 @@ function restoreSession(w:SingleSession){
   preview.value=null;candidates.value=[];stale.value=w.result?.stale??false;error.value='';notice.value='会话已恢复，未发起计算。继续拟合前请重新预览并复核背景。';restoredReview.value=true;
 }
 const restoredReview=ref(false);
-defineExpose({sessionState,restoreSession,isBusy:()=>busy.value||scenarioBusy.value});
+defineExpose({sessionState,restoreSession,materialResultHint:()=>!result.value?'请先完成拟合，再计算材料参数。':stale.value?'参数已修改，请重新拟合后再计算材料参数。':'',isBusy:()=>busy.value||scenarioBusy.value});
 </script>
-<template><section class="xps-workbench">
-  <div class="xps-toolbar"><span>多峰 XPS · {{source?`${source.sheet} / ${source.y_column}`:'请先导入并选择谱列'}}</span><div class="workbench-tools" role="group" aria-label="配置操作"><button :disabled="busy||!source||!x.length" @click="fileInput?.click()">加载配置 JSON</button><button :disabled="!result||stale||!result.converged||busy" @click="template">用当前配置批量拟合</button><input ref="fileInput" type="file" accept=".json,application/json" hidden @change="load" /></div></div>
-  <p v-if="result&&!stale&&!busy" role="status" class="fit-complete-notice">拟合计算已返回，请查看诊断。<button @click="viewResults">查看结果</button></p>
+<template><section class="xps-workbench single-workbench" :class="{'results-open':resultsOpen,'layout-stacked':stacked,'chart-expanded':chartExpanded}" :style="layoutStyle" @keydown.esc="handleChartEscape" :data-active-pane="activePane">
+
+  <header class="single-workflow-toolbar"><WorkbenchLayoutTools :expanded="chartExpanded" :settings-width="settingsWidth" :result-width="resultWidth" :settings-max="settingsMax" :result-max="resultMax" :results-open="resultsOpen" :stacked="stacked" @toggle="toggleChart" @resize="setWidth" @reset="resetWidths" /><span v-if="busy||stale" class="single-workflow-status" role="status">{{busy?'计算中':stale?'参数已变更 · 需要重新拟合':''}}</span><div class="single-workflow-actions"><button ref="resultTrigger" class="single-results-toggle" type="button" :aria-expanded="resultsOpen&&!chartExpanded" aria-controls="analysis-results" data-test="toggle-results" @click="resultsOpen&&!chartExpanded?closeResults():viewResults()">{{resultsOpen&&!chartExpanded?'收起结果':'结果与诊断'}}</button><button :disabled="busy||!source" @click="fileInput?.click()">复用拟合设置</button><button :disabled="!result||stale||!result.converged||busy" @click="template" data-test="multi-template">用于批量拟合</button></div></header>
   <p v-if="error" class="error xps-message" role="alert">{{error}}</p><p v-if="notice" class="hint xps-message" role="status">{{notice}}</p>
   <label v-if="restoredReview&&config.background.kind!=='shirley'" class="xps-check confirmation-callout"><input v-model="config.background.confirmed" type="checkbox" :disabled="!preview||busy" />恢复后已重新预览并复核当前背景</label>
-  <div class="xps-grid"><aside id="analysis-settings" tabindex="-1" class="xps-control-column"><XpsFitControls ref="controls" :config="config" :previewed="Boolean(preview)" :background-preview="preview" :busy="busy||scenarioBusy" :candidates="candidates" @preview="action('preview')" @fit="action('fit')" @candidates="action('candidates')" @error="error=$event" @calibrate="calibrate" /></aside>
-    <XpsChart id="analysis-plot" :selected-peak="selectedPeak" ref="chart" :components="config.components" :x="x" :y="y" :shift="config.shift_eV" :start="Number(config.range_start)" :end="Number(config.range_end)" :preview="preview" :result="stale?null:result" @range-endpoint-focus="controls?.focusRangeEndpoint($event)" @add-peak="addAt" @remove-peak="removeAt" @range="range" />
-    <aside id="analysis-results" ref="resultSection" tabindex="-1" aria-label="拟合结果" class="xps-result-column"><XpsResults :selected-peak="selectedPeak" @select="selectedPeak=$event" :result="result" :stale="stale" :busy="busy" @export="download" @image="chart?.downloadImage()" />
-  <div class="analysis-archive"><div class="archive-heading"><h2>比较与归档</h2><span>复核后记录分析依据</span></div>
+  <div v-if="deletion.canUndo.value" class="undo-peak-message" role="status"><span>继续编辑前可撤销最近删除的峰。</span><button type="button" data-test="undo-delete-peak" :disabled="busy||scenarioBusy" @click="undoDelete">撤销删除峰</button></div>
+  <WorkbenchViewNav :active="activePane" @navigate="navigateView" /><div ref="grid" class="xps-grid"><aside id="analysis-settings" tabindex="-1" class="xps-control-column"><div class="configuration-actions"><input ref="fileInput" type="file" accept=".json,application/json" hidden @change="load" /></div><XpsFitControls ref="controls" :selected-peak="selectedPeak" :has-result="Boolean(result)" @remove="removeAt" @select="selectPeak" :config="config" :previewed="Boolean(preview)" :background-preview="preview" :busy="busy||scenarioBusy" :candidates="candidates" @preview="action('preview')" @fit="action('fit')" @candidates="action('candidates')" @error="error=$event" @calibrate="calibrate" /></aside>
+    <WorkbenchSplitHandle label="调整设置栏宽度" controls="analysis-settings" side="settings" :value="settingsWidth" :min="232" :max="settingsMax" @resize="setWidth('settings',$event)" />
+    <XpsChart :read-only="busy||scenarioBusy" id="analysis-plot" tabindex="-1" :selected-peak="selectedPeak" @select="selectPeak" ref="chart" :components="config.components" :x="x" :y="y" :shift="config.shift_eV" :start="Number(config.range_start)" :end="Number(config.range_end)" :preview="preview" :result="stale?null:result" @range-endpoint-focus="focusRangeEndpoint" @add-peak="addAt" @remove-peak="removeAt" @range="range" />
+    <WorkbenchSplitHandle v-show="resultsOpen" label="调整结果栏宽度" controls="analysis-results" side="results" :value="resultWidth" :min="288" :max="resultMax" @resize="setWidth('results',$event)" />
+    <aside id="analysis-results" ref="resultSection" tabindex="-1" aria-label="拟合结果" class="xps-result-column" @keydown.esc.stop="handleResultsEscape"><button class="single-results-close" type="button" @click="closeResults">关闭结果面板</button><ResultWorkspace workstation ref="resultViews"><XpsResults locatable @navigate="navigateReview" @locate="locatePeak" :selected-peak="selectedPeak" @select="selectedPeak=$event" :result="result" :stale="stale" :busy="busy||scenarioBusy" @export="download" @image="chart?.downloadImage()" />
+  <template #archive><div class="analysis-archive"><div class="archive-heading"><h2>比较与归档</h2><span>复核后记录分析依据</span></div>
   <FitScenarioComparison :snapshot="analysisSnapshot" :current-key="scenarioKey" :busy="busy" @activity="scenarioBusy=$event" />
   <AnalysisReportActions :entries="analysisSnapshot?[{label:source?.filename??'当前 XPS 谱线',snapshot:analysisSnapshot,status:stale?'已过期':'已计算'}]:[]" :disabled="busy||scenarioBusy" />
-  </div></aside></div>
+  </div></template></ResultWorkspace></aside></div>
 </section></template>

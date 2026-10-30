@@ -124,8 +124,8 @@ export function normalizedBatchRows(rows:BatchRow[]):BatchRow[]{
   const copy=clone(rows);let unsettled=false;
   for(const r of copy){
     if(r.status==='running'){r.status='pending';r.result=null;r.accepted_attempt_id=null;for(const a of r.attempts)if(!a.result){a.invalidated=true;a.error=a.error||'保存时请求未完成；恢复后需重新执行';}}
-    if(unsettled&&['success','skipped'].includes(r.status))fail('未完成任务之后存在已终结任务');
-    if(!['success','skipped'].includes(r.status))unsettled=true;
+    if(unsettled&&['success','review','failed','skipped'].includes(r.status))fail('未完成任务之后存在已终结任务');
+    if(r.status==='pending')unsettled=true;
     if(r.result){const at=r.attempts.filter(a=>!a.invalidated&&a.result).at(-1);if(at&&JSON.stringify(at.result)===JSON.stringify(r.result))r.result=at.result;}
   }
   return copy;

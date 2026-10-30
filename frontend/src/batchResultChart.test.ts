@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import Plotly from 'plotly.js-dist-min';
 import { createMultiConfig } from './multipeakState';
@@ -6,7 +6,8 @@ import BatchResultChart from './components/BatchResultChart.vue';
 
 vi.mock('plotly.js-dist-min',()=>({default:{react:vi.fn().mockResolvedValue(undefined),purge:vi.fn(),downloadImage:vi.fn()}}));
 const wrappers:ReturnType<typeof mount>[]=[];
-afterEach(()=>{wrappers.splice(0).forEach(w=>w.unmount());vi.clearAllMocks();});
+beforeEach(()=>{vi.spyOn(Element.prototype,'clientWidth','get').mockReturnValue(900);});
+afterEach(()=>{wrappers.splice(0).forEach(w=>w.unmount());vi.restoreAllMocks();vi.unstubAllGlobals();vi.clearAllMocks();});
 async function chart(xps=false){
   const request:any=createMultiConfig([0,1,2,3,4],[1,2,3,2,1],null,'general');request.range_start=1;request.range_end=3;
   if(xps){delete request.analysis_mode;request.shift_eV=1;}
@@ -52,4 +53,18 @@ it('切换谱线时等待未完成的绘图结束后再释放图表',async()=>{
   expect(Plotly.purge).not.toHaveBeenCalled();
   finish();await flushPromises();
   expect(Plotly.purge).toHaveBeenCalledWith(node);
+});
+it('容器高度变化重新布局并保持缩放版本，复位才重置；卸载释放观察器',async()=>{
+  let height=400,resize!:(entries:any[])=>void;
+  const disconnect=vi.fn();
+  vi.spyOn(Element.prototype,'clientHeight','get').mockImplementation(()=>height);
+  vi.stubGlobal('ResizeObserver',class{constructor(cb:any){resize=cb;}observe(){}disconnect=disconnect;});
+  const w=await chart();await w.setProps({fill:true});await flushPromises();
+  const first=vi.mocked(Plotly.react).mock.calls.at(-1)![2] as any;
+  expect(first).toMatchObject({width:900,height:400,autosize:false});
+  height=550;resize([{contentRect:{width:900,height}}]);await flushPromises();
+  expect(vi.mocked(Plotly.react).mock.calls.at(-1)![2]).toMatchObject({height:550,uirevision:first.uirevision});
+  await w.get('[data-test="batch-chart-reset"]').trigger('click');await flushPromises();
+  expect((vi.mocked(Plotly.react).mock.calls.at(-1)![2] as any).uirevision).not.toBe(first.uirevision);
+  w.unmount();expect(disconnect).toHaveBeenCalledTimes(1);
 });

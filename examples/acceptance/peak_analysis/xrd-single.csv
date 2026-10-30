@@ -1,0 +1,2 @@
+Sample,Spectrum,Peak,Model,Center,FWHM,Height,Area,RMSE,Center_SE,FWHM_SE
+synthetic-xrd,scan-1,p111,Gaussian,60,0.2,100,21.2893403886,0.1,0.01,0.002

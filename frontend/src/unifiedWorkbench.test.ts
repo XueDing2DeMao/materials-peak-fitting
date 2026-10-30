@@ -19,6 +19,60 @@ const wrappers:Array<{unmount:()=>void}>=[];
 afterEach(()=>{wrappers.splice(0).forEach(w=>w.unmount());vi.clearAllMocks();vi.restoreAllMocks();});
 async function workbench(){const w=mount(MultiPeakWorkbench,{props:{x,y,source:null,mode:'general',unified:true}});wrappers.push(w);await w.get('[data-test="multi-baseline"]').setValue('none');await w.get('[data-test="multi-add"]').trigger('click');return w;}
 describe('统一峰拟合工作区',()=>{
+  it('参数页签仅改变可见模块，保留输入、基线复核、结果与求解次数',async()=>{
+    const w=await workbench();vi.mocked(singleApi.runFit).mockResolvedValue(fitted);
+    await w.get('[data-test="multi-fit"]').trigger('click');await flushPromises();
+    const config=w.getComponent(MultiPeakControls).props('config'),before=JSON.stringify(config),plot=w.get('[data-test="multi-plot"]').element;
+    for(const section of ['baseline','peaks','range'])await w.get(`[data-test="parameter-tab-${section}"]`).trigger('click');
+    expect(JSON.stringify(config)).toBe(before);expect(singleApi.runFit).toHaveBeenCalledTimes(1);
+    expect(singleApi.previewBaseline).not.toHaveBeenCalled();expect(w.get('[data-test="multi-plot"]').element).toBe(plot);
+    expect(w.getComponent(ResultsPanel).props('stale')).toBe(false);
+    await w.get('[data-test="parameter-tab-range"]').trigger('keydown',{key:'ArrowRight'});
+    expect(w.get('[data-test="parameter-tab-baseline"]').attributes('aria-selected')).toBe('true');
+  });
+  it('结果定位使用稳定峰 ID，不把优化参数覆盖编辑初值',async()=>{
+    const w=await workbench();vi.mocked(singleApi.runFit).mockResolvedValue({...fitted,parameters:{...fitted.parameters,xc:{value:2.1,standard_error:null}}});
+    await w.get('[data-test="multi-fit"]').trigger('click');await flushPromises();
+    const config=w.getComponent(MultiPeakControls).props('config'),before=JSON.stringify(config);
+    await w.get('[data-test="locate-peak-p1"]').trigger('click');await flushPromises();
+    expect(w.get('[data-test="parameter-tab-peaks"]').attributes('aria-selected')).toBe('true');
+    expect(w.getComponent(MultiPeakChart).props('selectedPeak')).toBe('p1');expect(JSON.stringify(config)).toBe(before);
+    await w.get('[data-test="result-view-parameters"]').trigger('click');
+    expect(w.find('[data-test="peak-overview"]').exists()).toBe(true);expect(singleApi.runFit).toHaveBeenCalledTimes(1);
+  });
+
+  it('紧凑锚点编辑保留坐标对应关系，编辑和删除均撤销复核',async()=>{
+    const w=await workbench(),config=w.getComponent(MultiPeakControls).props('config');
+    await w.get('[data-test="multi-baseline"]').setValue('line');
+    config.baseline.anchors=[{x:0,y:1},{x:2,y:3},{x:4,y:1}];await flushPromises();
+    config.baseline.confirmed=true;await flushPromises();
+    await w.get('[aria-label="锚点 2 Y"]').setValue(2.5);await flushPromises();
+    expect(config.baseline.anchors).toEqual([{x:0,y:1},{x:2,y:2.5},{x:4,y:1}]);
+    expect(config.baseline.confirmed).toBe(false);
+    config.baseline.confirmed=true;await flushPromises();
+    await w.get('[aria-label="删除锚点 2"]').trigger('click');await flushPromises();
+    expect(config.baseline.anchors).toEqual([{x:0,y:1},{x:4,y:1}]);
+    expect((w.get('[aria-label="锚点 2 X"]').element as HTMLInputElement).value).toBe('4');
+    expect(config.baseline.confirmed).toBe(false);
+    config.baseline.confirmed=true;await flushPromises();
+    w.getComponent(MultiPeakChart).vm.$emit('move-anchor',0,{x:.5,y:1.5});await flushPromises();
+    expect(config.baseline.anchors[0]).toEqual({x:.5,y:1.5});expect(config.baseline.confirmed).toBe(false);
+    expect(singleApi.runFit).not.toHaveBeenCalled();expect(multiApi.fitMulti).not.toHaveBeenCalled();
+  });
+  it('切换结果视图保留模型比较选项和拟合结果，不重新求解',async()=>{
+    const w=await workbench();vi.mocked(singleApi.runFit).mockResolvedValue(fitted);
+    await w.get('[data-test="multi-fit"]').trigger('click');await flushPromises();
+    const plot=w.get('[data-test="multi-plot"]').element;
+    await w.get('[data-test="result-view-archive"]').trigger('click');
+    await w.get('[data-test="include-asymmetric"]').setValue(true);
+    await w.get('[data-test="result-view-diagnostics"]').trigger('click');
+    await w.get('[data-test="result-view-results"]').trigger('click');
+    await w.get('[data-test="result-view-archive"]').trigger('click');
+    expect((w.get('[data-test="include-asymmetric"]').element as HTMLInputElement).checked).toBe(true);
+    expect(w.get('[data-test="multi-plot"]').element).toBe(plot);
+    expect(w.getComponent(ResultsPanel).props('result')).toEqual(fitted);
+    expect(singleApi.runFit).toHaveBeenCalledTimes(1);
+  });
   it('导入、更换数据和切换模式均不自动建峰或检测候选峰',async()=>{
     const w=mount(MultiPeakWorkbench,{props:{x,y,source:null,mode:'general',unified:true}});wrappers.push(w);
     const config=()=>w.getComponent(MultiPeakControls).props('config');
