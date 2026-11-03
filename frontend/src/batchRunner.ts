@@ -1,5 +1,6 @@
 /** 当前会话的顺序执行器；暂停/停止在当前 HTTP 求解返回后生效。 */
 import { clone } from './multipeakState';
+import { validateBatchUnits } from './batchInput';
 import { fitBatch, inheritParameters, inheritanceWarnings, topology } from './fitAdapter';
 import type { BatchInput, BatchRow, BatchAttempt, BatchRequest, BatchResult } from './batchTypes';
 
@@ -11,6 +12,7 @@ export class BatchRunner {
   private parent:{row:BatchRow;attempt:BatchAttempt}|null=null;
   constructor(inputs:BatchInput[],private fit:(p:BatchRequest)=>Promise<BatchResult>=fitBatch,readonly sequential=true,readonly id:string=crypto.randomUUID()){
     if(!inputs.length||inputs.length>100)throw new Error('批次需要 1—100 条谱线');
+    for(const row of inputs)validateBatchUnits(row.request);
     if(new Set(inputs.map(r=>r.id)).size!==inputs.length)throw new Error('任务 ID 不能重复');
     if(inputs.some(r=>topology(r.request)!==topology(inputs[0].request)))throw new Error('同批次的峰模型和约束必须一致');
     this.rows=clone(inputs).map(row=>({...row,status:'pending',attempts:[],result:null,accepted_attempt_id:null}));
@@ -96,6 +98,7 @@ export class BatchRunner {
   }
   rewind(index:number,request:BatchRequest){
     if(this.executing||index<0||index>=this.rows.length)throw new Error('请先暂停当前谱');
+    validateBatchUnits(request);
     if(topology(request)!==topology(this.rows[index].request))throw new Error('修改峰数或模型请建立新批次');
     this.rows[index].request=clone(request);
     for(const row of this.rows.slice(index)){row.status='pending';row.result=null;row.accepted_attempt_id=null;for(const attempt of row.attempts)attempt.invalidated=true;}

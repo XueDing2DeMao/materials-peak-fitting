@@ -223,8 +223,8 @@ html:has(.parameter-dialog[open]) { overflow: hidden; }
 .chart-heading .point-count { flex: none; }
 .chart-canvas { position: relative; }
 .chart, .xps-plot, .residual-chart, .xps-residual { margin-top: 32px; }
-/* 工具栏独占上方留白，避免窄屏时覆盖图例、刻度与数据。 */
-.js-plotly-plot .plotly .modebar-container { top: -30px !important; }
+/* 单谱主图和残差上方是操作栏，没有为工具预留空白；原生工具保持在图内。 */
+.js-plotly-plot:not(.xps-plot):not(.xps-residual) .plotly .modebar-container { top: -30px !important; }
 .chart, .xps-plot { height: var(--plot-height); min-height: var(--plot-height); width: 100%; }
 .residual-chart, .xps-residual { height: var(--plot-residual-height); min-height: var(--plot-residual-height); width: 100%; }
 .chart-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: var(--ui-space-2); padding: var(--ui-space-6); text-align: center; border: 1px dashed var(--ui-border); background: var(--ui-subtle); border-radius: var(--ui-control-radius); }
@@ -295,9 +295,6 @@ html:has(.parameter-dialog[open]) { overflow: hidden; }
 .result-details table { margin-bottom: var(--ui-space-3); }
 .result-details .parameter-results td { overflow-wrap: anywhere; }
 .solver-message { font-size: var(--ui-caption); overflow-wrap: anywhere; }
-.result-export-footer { flex-shrink: 0; }
-.result-export-footer .export-actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); margin-top: var(--ui-space-3); }
-.result-export-footer .export-actions button { flex: 0 1 auto; }
 table { width: 100%; border-collapse: collapse; font-size: var(--ui-body); }
 th, td { text-align: left; vertical-align: top; padding: var(--ui-space-2) var(--ui-space-3); border-bottom: 1px solid var(--ui-border); overflow-wrap: anywhere; }
 th { background: var(--ui-subtle); font-weight: 500; }

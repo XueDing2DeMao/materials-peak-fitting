@@ -12,8 +12,8 @@ textarea { font: inherit; border: 1px solid var(--ui-border-strong); border-radi
 textarea:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px; }
 .skip-link { position: fixed; left: 16px; top: -100px; z-index: 100; padding: 12px 20px; background: var(--ui-primary); color: white; border-radius: 6px; }
 .skip-link:focus { top: 12px; }
-.analysis-workbench { max-width: 1920px; padding: 0 20px 28px; }
-.workbench-header { display: grid; grid-template-columns: auto minmax(0,1fr); min-height: 72px; margin: 0 -20px; padding: 10px 20px; gap: 20px; background: var(--ui-surface); border-bottom: 1px solid var(--ui-border); }
+.analysis-workbench { max-width: 1920px; padding: 0 var(--ui-page-gutter) var(--ui-space-6); }
+.workbench-header { display: grid; grid-template-columns: auto minmax(0,1fr); min-height: 72px; margin: 0 calc(-1 * var(--ui-page-gutter)); padding: var(--ui-space-2) var(--ui-page-gutter); gap: 20px; background: var(--ui-surface); border-bottom: 1px solid var(--ui-border); }
 .product-identity { gap: 12px; }
 .product-mark { width: 36px; height: 36px; border: 0; border-radius: 12px; color: white; background: var(--ui-primary); }
 .product-mark svg { width: 27px; height: 27px; }
@@ -107,8 +107,6 @@ textarea:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px
 .peak-detail-toggle:hover { text-decoration: underline; text-underline-offset: 3px; }
 .compact-result-table tbody th { vertical-align: middle; }
 .result-details>summary:hover { color: var(--ui-primary); }
-.result-export-footer .export-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.result-export-footer .export-actions button { flex: 0 1 auto; font-size: 12px; }
 .analysis-archive { border: 1px solid var(--ui-border); border-radius: 10px; padding: 16px; background: var(--ui-surface); }
 .archive-heading { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 8px; }
 .archive-heading h2 { font-size: 16px; }
@@ -179,8 +177,8 @@ textarea:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px
 .analysis-workbench .batch-tabs { gap: 4px; }
 .analysis-workbench .batch-tabs button { border: 0; background: transparent; border-bottom: 2px solid transparent; border-radius: 0; }
 .analysis-workbench .batch-tabs button[aria-pressed=true] { color: var(--ui-primary); background: var(--ui-selected); border-bottom-color: var(--ui-primary); }
-.analysis-workbench .batch-menu summary, .result-export-menu summary { min-height: 40px; border-color: var(--ui-border); border-radius: 6px; }
-.analysis-workbench .batch-menu-content, .result-export-options { border-radius: 8px; box-shadow: 0 8px 28px #20365420; }
+.analysis-workbench .batch-menu summary { min-height: 40px; border-color: var(--ui-border); border-radius: 6px; }
+.analysis-workbench .batch-menu-content { border-radius: 8px; box-shadow: 0 8px 28px #20365420; }
 .analysis-workbench .batch-menu-content button { text-align: left; }
 .analysis-workbench .batch-overview, .analysis-workbench .batch-trends { margin: 0; }
 .analysis-workbench .batch-section-nav { margin: 0; }
@@ -241,7 +239,6 @@ textarea:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px
   .analysis-workbench .batch-toolbar>.xps-actions { gap: 8px; }
   .analysis-workbench .batch-toolbar>.xps-actions>button { white-space: normal; height: auto; min-height: 44px; }
   .analysis-workbench .batch-detail-heading { padding: 12px; }
-  .result-export-footer .export-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
@@ -284,8 +281,9 @@ textarea:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px
 .xps-chart [data-test=peak-marker-caption]{margin:0;font-size:12px}
 .xps-message{margin:6px 0 10px;font-size:13px}
 .baseline-anchor-editor{margin:12px 0;border:1px solid var(--ui-border);border-radius:6px;background:var(--ui-subtle)}
-.baseline-anchor-actions{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:6px;margin:8px 0 12px}
-.baseline-anchor-actions button{width:100%;min-width:0;margin:0;padding-inline:6px;font-size:12px;white-space:normal;height:auto;min-height:36px}
+.baseline-anchor-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-2); }
+.baseline-anchor-actions button { width: 100%; min-width: 0; margin: 0; padding-inline: 4px; font-size: 12px; white-space: normal; height: auto; min-height: var(--ui-control-height); }
+.baseline-anchor-actions .anchor-count { color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
 @media(pointer:coarse){.baseline-anchor-actions button{min-height:44px}}
 .anchor-drag-overlay{position:absolute;inset:0;pointer-events:none;z-index:3}
 .anchor-drag-handle{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;touch-action:none;cursor:grab;display:block;width:16px;height:16px;min-height:16px;padding:0;border:1px solid var(--ui-primary);border-radius:50%;background:transparent;color:var(--ui-primary);font-size:0;line-height:0;box-shadow:none}
@@ -307,3 +305,54 @@ textarea:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px
 .baseline-anchor-editor .anchor-row button:hover{color:var(--ui-danger);background:#fff5f6;border-color:var(--ui-border)}
 @media(max-width:600px){.baseline-anchor-editor .anchor-grid-head,.baseline-anchor-editor .anchor-row{grid-template-columns:20px minmax(0,1fr) minmax(0,1fr) 44px}.baseline-anchor-editor .anchor-row input,.baseline-anchor-editor .anchor-row button{height:44px;min-height:44px}.baseline-anchor-editor .anchor-row button{width:44px}}
 @media(min-width:960px){.workspace-jump{display:none}.dataset-inspection{margin-bottom:10px}.workflow-description{margin:6px 2px}.fit-complete-notice{margin:8px 0}}
+
+/* 跨工作区共用的视觉规格；保留图谱拖拽手柄及紧凑表格的专用尺寸。 */
+.product-identity, .workspace-context, .header-status,
+.parameter-dialog-header > div, .parameter-dialog-footer > .hint { min-width: 0; }
+.parameter-dialog-header, .parameter-dialog-footer { flex-wrap: wrap; }
+.parameter-dialog-footer > .hint { flex: 1 1 240px; }
+.parameter-dialog-body { overscroll-behavior: contain; scrollbar-gutter: stable; }
+textarea { width: 100%; max-width: 100%; min-height: 96px; resize: vertical; }
+input[type=file] { max-width: 100%; }
+:where(.peak-form-grid, .import-column-fields) > label { margin: 0; align-content: start; }
+:where(.xps-actions, .export-actions, .peak-inline-actions, .batch-trend-controls) { gap: var(--ui-space-2); }
+.batch-trend-controls { flex-wrap: wrap; align-items: end; }
+.batch-trend-controls > label { margin-block: 0; min-width: 0; }
+.peak-analysis-workbench .peak-form-grid { gap: var(--ui-space-4); }
+.peak-analysis-workbench label { gap: var(--ui-space-2); }
+.peak-analysis-workbench input:not([type=checkbox]):not([type=file]),
+.peak-analysis-workbench select { height: var(--ui-control-height); padding-block: 0; }
+.peak-table-scroll, .batch-table-scroll { overscroll-behavior: contain; scroll-padding: var(--ui-space-2); }
+.peak-table-scroll th, .peak-table-scroll td { padding: var(--ui-space-2) var(--ui-space-3); vertical-align: middle; }
+.peak-table-scroll tbody tr:hover td { background: var(--ui-subtle); }
+.peak-pagination, .data-pagination { gap: var(--ui-space-2); }
+.peak-analysis-header h2, .chart-heading h2, .setup-data-header h3,
+.setup-config-header h3 { font-size: var(--ui-h3); }
+@media (max-width: 600px) {
+  .parameter-dialog-header, .parameter-dialog-footer,
+  .peak-parameter-dialog .parameter-dialog-header,
+  .peak-parameter-dialog .parameter-dialog-footer,
+  .peak-parameter-dialog .parameter-dialog-body { padding: var(--ui-space-3); }
+  .parameter-dialog-footer > .hint { flex-basis: 100%; }
+  .peak-formula-output, .peak-export-grid { grid-template-columns: minmax(0,1fr); }
+}
+@media (pointer: coarse) {
+  .peak-analysis-workbench input:not([type=checkbox]):not([type=file]),
+  .peak-analysis-workbench select { min-height: 44px; }
+}
+
+/* 桌面各流程保持同一内容起点，不覆盖小屏的堆叠布局。 */
+@media (min-width: 960px) {
+  .analysis-workbench.is-single-workbench,
+  .analysis-workbench.is-batch-import,
+  .analysis-workbench.is-background-review { padding-inline: var(--ui-page-gutter); }
+  .analysis-workbench > .workbench-header {
+    margin-inline: calc(-1 * var(--ui-page-gutter));
+    padding-inline: var(--ui-page-gutter);
+  }
+}
+:where(.single-workflow-toolbar, .review-view-toolbar, .peak-section-heading) {
+  gap: var(--ui-toolbar-gap);
+}
+:where(.chart-heading, .peak-section-heading, .results-heading) > :first-child { min-width: 0; }
+.fixed-toggle { white-space: nowrap; }

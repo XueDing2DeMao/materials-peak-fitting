@@ -2,27 +2,27 @@
 import FitReviewActions from "./FitReviewActions.vue";
 import PeakDiagnosticLinks from "./PeakDiagnosticLinks.vue";
 import PeakQuickSummary from "./PeakQuickSummary.vue";
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
+import ResultFileExports from './ResultFileExports.vue';
 import PeakResultTable from './PeakResultTable.vue';
 import SamplingDiagnostics from './SamplingDiagnostics.vue';
 import { presentPeaks } from '../resultPresentation';
 import { resultDiagnostics } from '../resultDiagnostics';
+import '../styles/fitDiagnostics.css';
 import type { MultiResult } from '../multipeakTypes';
 import type { XpsResult } from '../xpsTypes';
-const props=defineProps<{locatable?:boolean;result:MultiResult|XpsResult|null;hideActions?:boolean;stale:boolean;busy:boolean;unit:string;prefix:'multi'|'xps';accepted?:boolean;selectedPeak?:string}>();
+const props=defineProps<{yUnit?:string;locatable?:boolean;result:MultiResult|XpsResult|null;hideActions?:boolean;stale:boolean;busy:boolean;unit:string;prefix:'multi'|'xps';accepted?:boolean;selectedPeak?:string}>();
 const emit=defineEmits<{navigate:[target:'baseline'|'peaks'|'chart'|'diagnostics'];locate:[id:string,parameter:string];export:[kind:'curves'|'parameters'|'configuration'];image:[];select:[id:string]}>();
-const exportMenu=ref<HTMLDetailsElement|null>(null);
-watch(()=>props.result,()=>{if(exportMenu.value)exportMenu.value.open=false;});
 const number=(v:number|null|undefined)=>v==null||!Number.isFinite(v)?'—':Number(v.toPrecision(6)).toString();
 const percent=(v:number|null|undefined)=>v==null||!Number.isFinite(v)?'—':`${(v*100).toFixed(2)}%`;
 const diagnosis=computed(()=>resultDiagnostics(props.result,{busy:props.busy,accepted:props.accepted}));
+const reviewStatus = computed(() => `诊断：${diagnosis.value.diagnostic} · 人工状态：${diagnosis.value.review}`);
 const peaks=computed(()=>props.result?presentPeaks(props.result):[]);
 const warnings=computed(()=>diagnosis.value.warnings),warningTags=computed(()=>diagnosis.value.tags);
 const metrics:Record<string,string>={r_squared:'R²（扣背景信号）',rmse:'RMSE',rss:'RSS',free_parameters:'独立自由参数',degrees_of_freedom:'自由度',residual_variance:'残差方差估计（强度²）',aicc:'AICc',bic:'BIC',durbin_watson:'Durbin–Watson'};
 function download(kind:'curves'|'parameters'|'configuration'|'image'){
   if(props.stale||props.busy)return;
   if(kind==='image')emit('image');else emit('export',kind);
-  if(exportMenu.value)exportMenu.value.open=false;
 }
 </script>
 
@@ -30,15 +30,6 @@ function download(kind:'curves'|'parameters'|'configuration'|'image'){
   <section class="panel xps-results compact-fit-results">
     <div class="panel-title compact-result-heading">
       <h2>拟合结果</h2>
-      <details v-if="result&&!hideActions" ref="exportMenu" class="result-export-menu" data-result-section="archive" data-test="result-export-menu">
-        <summary>导出</summary>
-        <div class="result-export-options">
-          <button :disabled="stale||busy" @click="download('curves')" :data-test="`${prefix}-export-curves`">曲线 CSV</button>
-          <button :disabled="stale||busy" @click="download('parameters')">参数 CSV</button>
-          <button :disabled="stale||busy" @click="download('configuration')" :data-test="`${prefix}-export-config`">配置 JSON</button>
-          <button :disabled="stale||busy" @click="download('image')">谱图 PNG</button>
-        </div>
-      </details>
     </div>
     <p v-if="!result" class="hint">暂无拟合结果</p>
     <template v-else>
@@ -49,21 +40,29 @@ function download(kind:'curves'|'parameters'|'configuration'|'image'){
         <span>R²（扣背景） <b>{{number(result.statistics.r_squared)}}</b></span>
         <span>RMSE <b>{{number(result.statistics.rmse)}}</b></span>
       </div>
-      <p class="result-diagnostic-state" role="status">诊断：{{diagnosis.diagnostic}} · 人工状态：{{diagnosis.review}}</p><p class="hint">收敛不等于模型适用。</p>
-      <details v-if="diagnosis.notes.length" class="result-details" data-result-section="diagnostics"><summary>计算口径</summary><p v-for="note in diagnosis.notes" :key="note" class="hint">{{note}}</p></details>
+      <p class="result-diagnostic-state" :class="{'with-table-status':locatable}" role="status">{{reviewStatus}}</p>
+      <p v-if="!locatable" class="hint result-quality-note">收敛不等于模型适用。</p>
+      <details v-if="!locatable && diagnosis.notes.length" class="result-details" data-result-section="diagnostics"><summary>计算口径</summary><p v-for="note in diagnosis.notes" :key="note" class="hint">{{note}}</p></details>
       <details v-if="warningTags.length" class="compact-result-warnings" data-test="result-warnings">
         <summary data-test="result-warning-summary"><span>⚠ 需要复核</span><span v-for="tag in warningTags" :key="tag" class="result-warning-tag">{{tag}}</span><span class="warning-detail-label">展开详情</span></summary>
+        <div class="diagnostic-warning-body">
         <ul v-if="warnings.length"><li v-for="warning in warnings" :key="warning">{{warning}}</li></ul>
         <p v-if="!result.converged">本次优化未收敛，请检查初值、分析区间和求解设置。</p>
         <p v-if="!result.diagnostics.identifiable">参数不可独立辨识，请检查峰数与参数约束。</p>
         <p v-if="!result.diagnostics.uncertainty_available">部分标准误不可用，请展开对应峰查看参数原因。</p>
         <p v-for="pair in result.diagnostics.strong_correlations" :key="pair.a+pair.b">{{pair.a}} / {{pair.b}}：{{number(pair.correlation)}}</p>
+        </div>
       </details>
-      <FitReviewActions v-if="locatable" :result="result" :stale="stale" :busy="busy" @navigate="emit('navigate',$event)" /><PeakDiagnosticLinks v-if="locatable" :busy="busy" :peaks="peaks" :correlations="result.diagnostics.strong_correlations" :stale="stale" @locate="(id,parameter)=>emit('locate',id,parameter)" /><PeakQuickSummary :busy="busy" v-if="locatable" :peaks="peaks" :unit="unit" :stale="stale" :selected-peak="selectedPeak" @select="emit('locate',$event,'')" /><div data-result-section="results"><PeakResultTable :peaks="peaks" :unit="unit" :stale="stale" :selected-peak="selectedPeak" @select="emit('select',$event)" /></div>
+      <FitReviewActions v-if="locatable" :result="result" :stale="stale" :busy="busy" @navigate="emit('navigate',$event)" /><PeakDiagnosticLinks v-if="locatable" :busy="busy" :peaks="peaks" :correlations="result.diagnostics.strong_correlations" :stale="stale" @locate="(id,parameter)=>emit('locate',id,parameter)" /><PeakQuickSummary :busy="busy" v-if="locatable" :peaks="peaks" :unit="unit" :y-unit="yUnit" :stale="stale" :selected-peak="selectedPeak" @select="emit('locate',$event,'')" /><div data-result-section="results"><PeakResultTable :status-text="locatable ? reviewStatus : undefined" :peaks="peaks" :unit="unit" :y-unit="yUnit" :stale="stale" :selected-peak="selectedPeak" @select="emit('select',$event)" /></div>
+      <details v-if="locatable" class="result-details" data-result-section="diagnostics">
+        <summary>计算口径</summary>
+        <p class="hint">收敛不等于模型适用。</p>
+        <p v-for="note in diagnosis.notes" :key="note" class="hint">{{note}}</p>
+      </details>
       <SamplingDiagnostics data-result-section="diagnostics" :x="result.x??[]" :peaks="peaks" :unit="unit" :xrd="result.configuration&&'analysis_mode' in result.configuration&&result.configuration.analysis_mode==='xrd'" />
       <details v-if="result.groups.length" class="result-details" data-result-section="results">
         <summary>峰组汇总（{{result.groups.length}}）</summary>
-        <div class="compact-result-table"><table><thead><tr><th>峰组</th><th>全域面积 / Y × {{unit}}</th><th>区间面积 / Y × {{unit}}</th><th>区间面积占比</th></tr></thead><tbody><tr v-for="g in result.groups" :key="g.id"><th>{{g.id}} · {{g.label}}</th><td>{{number(g.area_total)}}</td><td>{{number(g.area_window)}}</td><td>{{percent(g.area_fraction_window)}}</td></tr></tbody></table></div>
+        <div class="compact-result-table"><table><thead><tr><th>峰组</th><th>全域面积 / {{yUnit??'Y'}} × {{unit}}</th><th>区间面积 / {{yUnit??'Y'}} × {{unit}}</th><th>区间面积占比</th></tr></thead><tbody><tr v-for="g in result.groups" :key="g.id"><th>{{g.id}} · {{g.label}}</th><td>{{number(g.area_total)}}</td><td>{{number(g.area_window)}}</td><td>{{percent(g.area_fraction_window)}}</td></tr></tbody></table></div>
       </details>
       <details class="result-details" data-result-section="diagnostics" data-test="result-statistics">
         <summary>统计与求解详情</summary>
@@ -73,6 +72,12 @@ function download(kind:'curves'|'parameters'|'configuration'|'image'){
         <p class="hint">不同背景的 AICc/BIC 不宜直接比较。标准误的适用条件见诊断提示及各峰参数详情。</p>
       </details>
     </template>
+    <ResultFileExports v-if="result && !hideActions" :result="result">
+      <button type="button" :disabled="stale||busy" @click="download('curves')" :data-test="`${prefix}-export-curves`">曲线 CSV</button>
+      <button type="button" :disabled="stale||busy" @click="download('parameters')">参数 CSV</button>
+      <button type="button" :disabled="stale||busy" @click="download('configuration')" :data-test="`${prefix}-export-config`">配置 JSON</button>
+      <button type="button" :disabled="stale||busy" @click="download('image')">谱图 PNG</button>
+    </ResultFileExports>
   </section>
 </template>
 
@@ -101,8 +106,5 @@ function download(kind:'curves'|'parameters'|'configuration'|'image'){
 .peak-result-dialog .parameter-dialog-body{overscroll-behavior:contain}
 .peak-result-dialog .compact-result-table{margin-top:0}
 .parameter-state{display:inline-block;border:1px solid var(--ui-border);border-radius:4px;padding:2px 6px;font-size:12px}
-.result-export-menu{position:relative;margin-left:auto}
-.result-export-menu summary{border:1px solid var(--ui-border);border-radius:5px;padding:6px 12px;font-size:13px}
-.result-export-options{position:absolute;right:0;top:100%;z-index:20;display:grid;gap:6px;min-width:150px;padding:8px;background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:6px;box-shadow:0 4px 12px #0002}
 @media(max-width:600px){.compact-result-summary{gap:8px 16px}.compact-result-table th,.compact-result-table td{padding:8px}.compact-result-table{scrollbar-gutter:stable}.peak-result-dialog .parameter-dialog-footer{flex-wrap:wrap}.peak-result-dialog .parameter-dialog-body{padding:12px}}
 </style>

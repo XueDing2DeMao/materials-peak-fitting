@@ -15,5 +15,5 @@ const issues=computed(()=>props.peaks.flatMap(peak=>Object.entries(peak.paramete
 </script>
 <template><section v-if="issues.length" class="peak-diagnostic-links" data-result-section="review" aria-label="定位参数诊断">
   <h3>定位参数诊断</h3><p v-if="stale" class="hint">以下诊断来自上次计算，请重新拟合后再定位处理。</p>
-  <button v-for="issue in issues" :key="`${issue.id}.${issue.name}:${issue.reason}`" type="button" :disabled="stale||busy" @click="$emit('locate',issue.id,issue.name)"><strong>{{peaks.find(p=>p.id===issue.id)?.label || issue.id}} · {{PARAMETER_LABELS[issue.name as PeakParameterName] || issue.name}}（{{issue.id}}）</strong><span>{{issue.reason}}</span><small>{{issue.suggestion}}</small><span class="diagnostic-locate-label">定位参数 →</span></button>
+  <button v-for="issue in issues" :key="`${issue.id}.${issue.name}:${issue.reason}`" type="button" :disabled="stale||busy" @click="$emit('locate',issue.id,issue.name)"><strong>{{peaks.find(p=>p.id===issue.id)?.label || issue.id}} · {{PARAMETER_LABELS[issue.name as PeakParameterName] || issue.name}}（{{issue.id}}）</strong><span class="issue-reason">{{issue.reason}}</span><small>{{issue.suggestion}}</small><span class="diagnostic-locate-label">定位参数 →</span></button>
 </section></template>

@@ -12,13 +12,14 @@ import { validateXpsInput } from '../xpsApi';
 import { clone } from '../multipeakState';
 import { resultDiagnostics } from '../resultDiagnostics';
 import { isMulti } from '../fitAdapter';
+import { spectrumUnits } from '../spectrumUnits';
 import BatchBackgroundOverview from './BatchBackgroundOverview.vue';
 import DatasetAuditSummary from './DatasetAuditSummary.vue';
 import type {DatasetAudit} from '../datasetAudit';
 import BatchTrendChart from './BatchTrendChart.vue';
 import BatchExportPanel from './BatchExportPanel.vue';
 import BatchMetadataEditor from './BatchMetadataEditor.vue';
-import { conditionAxis,emptyMetadata,type MetadataByTask,type TrendMetric } from '../batchTrend';
+import { conditionAxis,emptyMetadata,trendUnit,type MetadataByTask,type TrendMetric } from '../batchTrend';
 import BatchImportSelector from './BatchImportSelector.vue';
 import { createSelection, sortSpectra, type SheetSelection, type SpectrumSelection, type SpectrumOrder } from '../batchSelection';
 import { prepareRequest } from '../batchInput';
@@ -100,6 +101,7 @@ const ready=computed(()=>!drafts.value.length&&inputs.value.some(r=>r.included)&
 const statusLabels:Record<string,string>={ready:'就绪',running:'运行中',pausing:'暂停中（等待当前谱）',paused:'已暂停',stopping:'停止中（等待当前谱）',stopped:'已停止',done:'已结束',pending:'待执行',success:'已完成计算',review:'待复核',failed:'失败',skipped:'已跳过'};
 const settingsOpen=ref(true),search=ref(''),statusFilter=ref('all');
 const detailTab=ref<'parameters'|'attempts'|'configuration'>('parameters'),selectedPeak=ref('');
+const resultsExpanded = ref(false);
 const reviewMessage=ref(''),reviewUndo=ref<string[]>([]);
 const bulkReviewOpen=ref(false),bulkSelection=ref(new Set<string>());
 const bulkTrigger=ref<HTMLButtonElement|null>(null),overviewTrigger=ref<HTMLButtonElement|null>(null);
@@ -129,7 +131,10 @@ const fileCount=computed(()=>new Set(inputs.value.map(row=>row.dataset.dataset_i
 const sheetCount=computed(()=>new Set(inputs.value.map(row=>`${row.dataset.dataset_id}:${row.sheet}`)).size);
 const trendCondition=computed(()=>conditionAxis((run.value?.rows??[]).map(row=>metadata.value[row.id]??emptyMetadata())));
 watch(trendCondition,c=>{if(!c.available)trendAxis.value='sequence';});
-const trendLabel=computed(()=>`${trendPeak.value||'未选择峰'} · ${trendNames[trendMetric.value]} / ${trendMetric.value.startsWith('area')?'Y × ':''}${unit.value} · ${trendAxis.value==='condition'?trendCondition.value.label:'执行序号'}`);
+const trendLabel=computed(()=>{
+  const valueUnits=new Set((run.value?.rows??[]).map(row=>trendUnit(row,trendMetric.value,unit.value)));
+  return `${trendPeak.value||'未选择峰'} · ${trendNames[trendMetric.value]} / ${valueUnits.size>1?'各谱单位见趋势表':[...valueUnits][0]??unit.value} · ${trendAxis.value==='condition'?trendCondition.value.label:'执行序号'}`;
+});
 const flowItems=computed(()=>[
   {id:'import' as const,label:'导入与配置',hint:inputs.value.length?`${included.value.length} 条谱线`:'选择数据',disabled:false},
   {id:'review' as const,label:'背景复核',hint:preflightFinished.value?`${reviewable.value.length-unconfirmed.value.length} / ${included.value.length}`:'等待预检',disabled:!preflightFinished.value&&!run.value},
@@ -154,6 +159,11 @@ function navigateTabs(event:KeyboardEvent){
 const explicitAnchors=computed(()=>{
   const template=currentTemplate.value;
   return Boolean(template&&isMulti(template)&&template.baseline.kind!=='none'&&template.baseline.anchors.length);
+});
+// 逐谱背景会重新估计端点水平；预先提示缺少窗口，避免整批运行后才发现。
+const missingBackgroundWindows=computed(()=>{
+  const t=currentTemplate.value;
+  return Boolean(t&&!isMulti(t)&&t.background.kind!=='none'&&!fixedBaseline.value&&(!t.background.low_window||!t.background.high_window));
 });
 const prepareHint=computed(()=>drafts.value.length?'请先纳入所选谱线或取消本次导入。':included.value.length>100?'实际纳入谱线超过 100 条，请减少选择。':!included.value.length?'请至少纳入一条谱线。':!unitsConfirmed.value?'请先核对并勾选 X 单位、区间一致。':
   explicitAnchors.value&&!fixedBaseline.value?'模板含显式锚点：背景相同时可选择固定绝对背景；否则请返回单谱工作区重新配置模板。':'列映射和顺序确认后，预检将检查每条谱线并进入背景复核。');
@@ -202,6 +212,14 @@ const counts=computed(()=>{
     failed:statuses.filter(s=>s==='failed').length,pending:statuses.filter(s=>s==='pending').length,
     skipped:statuses.filter(s=>s==='skipped').length};
 });
+function locateFailure() {
+  const rows = run.value?.rows ?? [];
+  let index = rows.findIndex((row, i) => i > selected.value && row.status === 'failed');
+  if (index < 0) index = rows.findIndex(row => row.status === 'failed');
+  if (index < 0) return;
+  changeView('results');
+  void locateSpectrum(index);
+}
 const latestAttempt=computed(()=>selectedRun.value?.attempts.filter(a=>!a.invalidated).at(-1));
 const selectedWarnings=computed(()=>[...new Set([
   selectedInput.value?.error,latestAttempt.value?.error,...(latestAttempt.value?.warnings??[]),
@@ -209,7 +227,8 @@ const selectedWarnings=computed(()=>[...new Set([
 ].filter((message):message is string=>Boolean(message)))]);
 const diagnosis=computed(()=>resultDiagnostics(shownResult.value,{busy:selectedRun.value?.status==='running',accepted:latestAttempt.value?.manually_accepted}));
 const sourceLabels:Record<string,string>={template:'模板',previous_result:'上一条结果',continuation:'本条续算'};
-const unit=computed(()=>analysisMode.value==='xps'?'eV':analysisMode.value==='xrd'?'°':'X 单位');
+const units=computed(()=>spectrumUnits(analysisMode.value,(shownRequest.value??currentTemplate.value)?.source));
+const unit=computed(()=>units.value.x);
 const formatNumber=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?'—':Number(value.toPrecision(6)).toString();
 const previousIndex=computed(()=>[...visibleRows.value].reverse().find(item=>item.index<selected.value)?.index);
 const nextIndex=computed(()=>visibleRows.value.find(item=>item.index>selected.value)?.index);
@@ -238,7 +257,7 @@ async function navigateList(event:KeyboardEvent){
   const list=event.currentTarget as HTMLElement;
   event.preventDefault();selectRow(event.key==='ArrowUp'?previousIndex.value:nextIndex.value);
   await nextTick();
-  const button=list.querySelector<HTMLButtonElement>(`[aria-label="查看谱线 ${selected.value+1}"]`);
+  const button=list.querySelector<HTMLButtonElement>(`[data-test="batch-view-${selected.value+1}"]`);
   button?.focus({preventScroll:true});button?.scrollIntoView?.({block:'nearest'});
 }
 function confirmAll(){
@@ -280,7 +299,7 @@ async function loadTemplate(event:Event){
     if(isMulti(template))await validateMultiInput(template);else await validateXpsInput(template);
     if(!await confirmDiscard(preflightFinished.value,'更换模板将清除现有背景预检与复核。'))return;
     currentTemplate.value=template;invalidate();selected.value=0;
-  }catch(e){error.value=e instanceof Error?e.message:String(e);}
+  }catch(e){error.value=e instanceof SyntaxError?'模板 JSON 格式无效，请检查文件内容后重新选择。当前模板保持不变。':`模板载入失败：${e instanceof Error?e.message:String(e)}`;}
   finally{busy.value=false;input.value='';}
 }
 async function upload(event:Event){
@@ -410,21 +429,22 @@ async function reviewRestored(){
 defineExpose({sessionState,restoreSession,materialResultHint:()=>run.value?.rows.some(usableBatchResult)?'':'请先完成拟合；当前批次没有可用且未失效的结果。',isBusy:()=>busy.value||active.value});
 </script>
 <template>
-<section class="batch-workbench" :class="{'is-review-workbench':reviewLayout,'is-import-workbench':activeView==='import'}">
+<section class="batch-workbench" :class="{'is-review-workbench':reviewLayout,'is-import-workbench':activeView==='import','is-results-workbench':activeView==='results','results-expanded':resultsExpanded}">
   <div ref="flowHeader" class="panel batch-header">
     <div class="batch-toolbar">
       <div><h2>批量拟合</h2><p class="hint" data-test="batch-context">{{analysisName}} · {{sequential?'顺序拟合':'独立拟合'}}</p></div>
       <div class="xps-actions">
         <button v-if="activeView!=='import'&&!run&&!preflightFinished" class="primary" :disabled="busy" @click="importAction">{{!currentTemplate?'设置拟合模板':inputs.length?'核对数据与配置':'添加数据文件'}}</button>
         <button v-show="activeView!=='import'&&(run||preflightFinished)" class="primary" :disabled="busy||active||(restoredReview&&!ready)||(!run&&!ready)||(run?.status==='done'&&!restoredReview)" @click="start" data-test="batch-start">{{run?.status==='done'?(restoredReview?'完成恢复复核':'批次计算已结束'):run?'继续批量拟合':'开始批量拟合'}}</button>
+        <button v-if="run&&counts.failed&&!active" @click="locateFailure" data-test="batch-locate-failure">处理失败项（{{counts.failed}}）</button>
         <button v-if="active" @click="run?.pause()">当前谱完成后暂停</button>
         <button v-if="active" @click="run?.stop()">当前谱完成后停止</button>
-        <details class="batch-menu"><summary>更多操作</summary><div class="batch-menu-content"><button :disabled="!included.length||busy||active" @click="metadataInput?.click()">载入实验记录 JSON</button><input ref="metadataInput" data-test="batch-metadata-file" type="file" accept=".json,application/json" hidden @change="loadMetadata" /><button :disabled="busy||active" @click="clear">新建批次（清空当前结果）</button></div></details>
+        <details class="batch-menu"><summary>更多操作</summary><div class="batch-menu-content"><p v-if="run" class="hint">默认连续计算，异常结果不继承。暂停／停止在当前谱求解返回后生效。</p><button :disabled="!included.length||busy||active" @click="metadataInput?.click()">载入实验记录 JSON</button><input ref="metadataInput" data-test="batch-metadata-file" type="file" accept=".json,application/json" hidden @change="loadMetadata" /><button :disabled="busy||active" @click="clear">新建批次（清空当前结果）</button></div></details>
       </div>
     </div>
     <p v-if="restoredReview" class="confirmation-callout"><span>会话已恢复；继续计算或调整结果前，请重新预览和复核背景。</span> <button :disabled="busy||active" @click="reviewRestored">重新预览恢复背景</button></p>
     <nav class="batch-flow" role="tablist" aria-label="批量拟合流程" @keydown="navigateTabs">
-      <button v-for="(item,i) in flowItems" :key="item.id" type="button" role="tab" :id="`batch-tab-${item.id}-${analysisMode}`" :aria-controls="panelId(item.id)" :aria-selected="activeView===item.id" :aria-current="activeView===item.id?'step':undefined" :tabindex="activeView===item.id?0:-1" :disabled="item.disabled" @click="changeView(item.id)" :data-test="`batch-step-${item.id}`"><span>{{i+1}}</span><span class="batch-flow-label">{{item.label}}<small>{{item.hint}}</small></span></button>
+      <button v-for="(item,i) in flowItems" :key="item.id" type="button" role="tab" :id="`batch-tab-${item.id}-${analysisMode}`" :aria-controls="panelId(item.id)" :title="item.hint" :aria-selected="activeView===item.id" :aria-current="activeView===item.id?'step':undefined" :tabindex="activeView===item.id?0:-1" :disabled="item.disabled" @click="changeView(item.id)" :data-test="`batch-step-${item.id}`"><span class="batch-step-number" aria-hidden="true">{{i+1}}</span><span class="batch-flow-label">{{item.label}}<small>{{item.hint}}</small></span></button>
     </nav>
     <p v-if="run" role="status" data-test="batch-status" class="batch-progress">
       <strong>{{statusLabels[run.status]}}</strong> · 已计算 {{counts.calculated}} / {{run.rows.length}} 条 · 已完成计算 {{counts.success}} · 待复核 {{counts.review}} · 失败 {{counts.failed}} · 待执行 {{counts.pending}} · 已跳过 {{counts.skipped}}
@@ -432,7 +452,7 @@ defineExpose({sessionState,restoreSession,materialResultHint:()=>run.value?.rows
     </p>
     <p v-else-if="!preflightFinished" class="hint">{{currentTemplate?'核对数据列与顺序后，预检背景。':'先选择拟合模板，再添加本批次数据。'}}</p>
     <p v-if="metadataMessage" role="status">{{metadataMessage}}</p>
-    <p v-if="run" class="hint">默认连续计算全部曲线，警告和失败留待批次结束后复核；异常结果不继承，下一谱从模板开始。暂停／停止在当前谱求解返回后生效。</p>
+
     <p v-if="busy" role="status">{{busyMessage||'正在检查模板…'}}</p><p v-if="error" role="alert" class="error">{{error}}</p>
   </div>
   <section :id="panelId('import')" role="tabpanel" :aria-labelledby="`batch-tab-import-${analysisMode}`" v-show="activeView==='import'" class="setup-stage">
@@ -485,18 +505,19 @@ defineExpose({sessionState,restoreSession,materialResultHint:()=>run.value?.rows
 
               <fieldset v-if="currentTemplate" :disabled="busy||locked" class="setup-config-fields">
                 <dl class="setup-range"><div><dt>X 单位</dt><dd>{{analysisMode==='general'?'原始数据单位（人工核对）':unit}}</dd></div><div><dt>拟合区间</dt><dd>{{formatNumber(currentTemplate.range_start)}} — {{formatNumber(currentTemplate.range_end)}}</dd></div></dl>
+          <p v-if="missingBackgroundWindows" class="warning" role="status" data-test="batch-background-window-hint">逐谱背景需要两端窗口。当前模板仅含手动水平时，请返回单谱设置端点窗口后重新用于批量拟合；仅当所有谱线背景相同时，才选择固定绝对背景。</p>
           <div class="batch-import-options">
             <div><label class="batch-strategy">批量策略<select v-model="sequential" data-test="batch-strategy"><option :value="false">独立拟合</option><option :value="true">顺序拟合</option></select></label><p class="hint">{{sequential?'后续谱线继承上一条获准结果作为初值，适用于相关连续序列；可用独立拟合作为对照，请核对实验顺序。':'每条谱线使用同一模板初值。'}}</p></div>
             <div>
               <div class="confirmation-callout" :class="{'is-confirmed':unitsConfirmed}">
                 <strong class="confirmation-status">{{unitsConfirmed?'✓ 已确认':'! 预检前请勾选确认'}}</strong>
-                <label class="xps-check"><input v-model="unitsConfirmed" type="checkbox" data-test="batch-units" aria-describedby="batch-units-hint" />已核对本批次 X 单位、区间{{analysisMode==='xps'?'及 XPS 校准设置':''}}一致</label>
-                <p id="batch-units-hint" class="confirmation-hint">{{unitsConfirmed?'单位与区间已核对。':'核对所有谱线后勾选，才能进入背景预检。'}}</p>
+                <label class="xps-check"><input v-model="unitsConfirmed" type="checkbox" data-test="batch-units" :aria-describedby="`batch-units-hint-${analysisMode}`" />已核对本批次 X 单位、区间{{analysisMode==='xps'?'及 XPS 校准设置':''}}一致</label>
+                <p :id="`batch-units-hint-${analysisMode}`" class="confirmation-hint">{{unitsConfirmed?'单位与区间已核对。':'核对所有谱线后勾选，才能进入背景预检。'}}</p>
               </div>
               <div :class="explicitAnchors?['confirmation-callout',{'is-confirmed':fixedBaseline}]:undefined">
                 <strong v-if="explicitAnchors" class="confirmation-status">{{fixedBaseline?'✓ 已确认使用固定背景':'! 当前模板需要确认背景适用性'}}</strong>
-                <label class="xps-check"><input v-model="fixedBaseline" type="checkbox" :aria-describedby="explicitAnchors?'batch-fixed-hint':undefined" />固定绝对背景（仅用于各谱背景相同的情况）</label>
-                <p v-if="explicitAnchors" id="batch-fixed-hint" class="confirmation-hint">模板含显式锚点：请确认所有谱线背景相同后勾选；背景不同请返回单谱工作区调整模板。</p>
+                <label class="xps-check"><input v-model="fixedBaseline" type="checkbox" :aria-describedby="explicitAnchors?`batch-fixed-hint-${analysisMode}`:undefined" />固定绝对背景（仅用于各谱背景相同的情况）</label>
+                <p v-if="explicitAnchors" :id="`batch-fixed-hint-${analysisMode}`" class="confirmation-hint">模板含显式锚点：请确认所有谱线背景相同后勾选；背景不同请返回单谱工作区调整模板。</p>
               </div>
             </div>
           </div>
@@ -533,16 +554,16 @@ defineExpose({sessionState,restoreSession,materialResultHint:()=>run.value?.rows
   <BatchBackgroundOverview :id="`batch-background-${analysisMode}`" tabindex="-1" v-if="activeView==='review'&&preflightFinished" v-show="overviewOpen" data-test="batch-overview-view" :rows="overviewRows" :selected="selected" :unit="unit" :reversed="analysisMode==='xps'" @select="locateSpectrum" />
   <div v-if="included.length&&(preflightFinished||run)" v-show="!reviewLayout||!overviewOpen" class="batch-results-layout" :id="`batch-spectra-${analysisMode}`" tabindex="-1" data-test="batch-results">
     <aside class="panel batch-sidebar" aria-label="谱线列表">
-      <div class="batch-sidebar-heading"><h3>谱线列表</h3><span class="hint">{{visibleRows.length}} / {{included.length}}</span></div>
+      <div class="batch-sidebar-heading"><h3>谱线队列</h3><span class="hint">{{visibleRows.length}} / {{included.length}}</span></div>
       <label>搜索谱线<input v-model="search" type="search" placeholder="文件、工作表或 Y 列" data-test="batch-search" /></label>
       <label>状态筛选<select v-model="statusFilter" data-test="batch-filter"><option value="all">全部</option><option value="review">{{activeView==='review'?'背景待复核':'待复核'}}</option><option value="failed">{{activeView==='review'?'预检失败':'失败'}}</option><option v-if="activeView==='review'" value="ready">背景已复核</option><option v-else-if="run" value="success">已完成计算</option><option value="pending">{{activeView==='review'?'待预检':'待执行'}}</option></select></label>
       <div v-if="reviewLayout&&bulkReviewOpen" class="review-bulk-selection"><button :disabled="reviewLocked||!visibleForReview.length" @click="selectVisibleForReview" data-test="batch-select-visible">全选当前筛选结果（{{visibleForReview.length}}）</button><button :disabled="!selectedForReview.length" @click="bulkSelection.clear()">清空选择</button></div>
       <div ref="queue" class="batch-list" @keydown="navigateList">
         <div v-for="item in visibleRows" :key="item.row.id" v-memo="[bulkReviewOpen,bulkSelection.has(item.row.id),item.row.id,selected===item.index,item.index,item.status,item.row.confirmed,item.row.preview,item.row.error,busy,locked,restoredReview,activeView,run?.rows[item.index]?.result,run?.rows[item.index]?.accepted_attempt_id]" class="batch-row" :class="{'batch-selected':selected===item.index,'is-bulk-selecting':reviewLayout&&bulkReviewOpen}" :data-row-index="item.index" data-test="batch-row">
           <label v-if="reviewLayout&&bulkReviewOpen" class="review-bulk-checkbox" :title="item.row.error?'预检失败，不能复核':item.row.confirmed?'已复核':!item.row.preview?'请先预检':'选择此谱线进行批量复核'"><input type="checkbox" :checked="bulkSelection.has(item.row.id)" :disabled="reviewLocked||item.status!=='review'||!item.row.request" :aria-label="`选择批量复核谱线 ${item.index+1}`" @change="chooseForReview(item.row,$event)" /></label>
-          <button class="batch-row-select" :title="`${item.row.dataset.filename} / ${item.row.sheet} / ${item.row.yColumn}`" :aria-label="`查看谱线 ${item.index+1}`" :aria-pressed="selected===item.index" @click="selectRow(item.index)">
-            <span class="batch-row-name">{{item.index+1}} · {{item.row.dataset.filename}}</span>
-            <span class="batch-row-column">{{item.row.sheet}} / {{item.row.yColumn}}</span>
+          <button class="batch-row-select" :title="`${item.row.dataset.filename} / ${item.row.sheet} / ${item.row.yColumn}`" :data-test="`batch-view-${item.index+1}`" :aria-pressed="selected===item.index" @click="selectRow(item.index)">
+            <span class="batch-row-name">{{item.index+1}} · {{item.row.yColumn}}</span>
+            <span class="batch-row-column">{{item.row.dataset.filename}} / {{item.row.sheet}}</span>
             <span class="batch-row-meta"><span class="batch-state" :class="`state-${item.status}`">{{item.status==='success'?'✓ ':item.status==='review'?'⚠ ':item.status==='failed'?'! ':item.status==='running'?'◌ ':''}}{{run&&activeView!=='review'?statusLabels[item.status]:item.status==='review'?'背景待复核':item.status==='failed'?'预检失败':item.status==='ready'?'✓ 背景已复核':'待预检'}}</span><span v-if="activeView==='results'">RMSE {{formatNumber(run?.rows[item.index]?.result?.statistics.rmse)}}</span><span v-if="activeView==='results'&&run?.rows[item.index]?.attempts.some(a=>a.id===run?.rows[item.index]?.accepted_attempt_id&&a.manually_accepted)">人工接受 · 警告保留</span></span>
           </button>
           <div v-show="activeView==='review'" class="confirmation-callout confirmation-compact" :class="{'is-confirmed':item.row.confirmed,'is-unavailable':!item.row.preview||Boolean(item.row.error)}">
@@ -555,8 +576,7 @@ defineExpose({sessionState,restoreSession,materialResultHint:()=>run.value?.rows
 
     <section class="batch-detail" v-if="selectedInput" aria-label="当前谱线结果">
       <section ref="detailHeading" tabindex="-1" class="panel batch-detail-heading">
-        <div class="batch-toolbar"><h3 data-test="batch-detail-title">{{selected+1}} · {{selectedInput.dataset.filename}} / {{selectedInput.yColumn}}</h3><span>{{selected+1}} / {{included.length}}</span></div>
-        <p class="hint">工作表：{{selectedInput.sheet}}</p>
+        <div class="batch-toolbar"><h3 data-test="batch-detail-title">{{selected+1}} · {{selectedInput.dataset.filename}} / {{selectedInput.yColumn}}<small class="batch-sheet">工作表：{{selectedInput.sheet}}</small></h3><span>{{selected+1}} / {{included.length}}</span></div>
         <div class="xps-actions"><button :disabled="previousIndex===undefined" @click="selectRow(previousIndex)" data-test="batch-previous">上一条</button><button :disabled="nextIndex===undefined" @click="selectRow(nextIndex)" data-test="batch-next">下一条</button><button :disabled="nextReviewIndex===undefined" @click="search='';statusFilter='all';selectRow(nextReviewIndex)">下一个待复核</button>
           <button v-if="run&&activeView==='results'" @click="trendPeak=selectedPeak||trendPeak;changeView('trend')">查看峰参数趋势</button>
         </div>
@@ -573,12 +593,13 @@ defineExpose({sessionState,restoreSession,materialResultHint:()=>run.value?.rows
         </div>
       </section>
       <DatasetAuditSummary v-if="selectedInput&&activeView!=='review'" :audit="audits[selectedInput.id]" />
-    <BatchResultChart v-if="(activeView==='review'||activeView==='results')&&shownRequest&&shownPreview" :key="selectedInput.id+activeView" :fill="reviewLayout" :request="shownRequest" :preview="shownPreview" :result="shownResult" :selected-peak="selectedPeak" />
+    <BatchResultChart v-if="(activeView==='review'||activeView==='results')&&shownRequest&&shownPreview" :key="selectedInput.id+activeView" :fill="reviewLayout||activeView==='results'" :request="shownRequest" :preview="shownPreview" :result="shownResult" :selected-peak="selectedPeak" />
       <div v-else-if="reviewLayout" class="panel review-empty" role="status"><h3>{{selectedInput.error?'当前谱线预检失败':'等待背景预览'}}</h3><p>{{selectedInput.error||'请先重新预览恢复背景，再检查曲线。'}}</p><button @click="openImport">查看数据与配置</button></div>
       <ResultWorkspace ref="resultViews" archive-label="记录与配置" class="batch-detail-tabs" v-if="shownRequest&&run" v-show="activeView==='results'">
+        <template #tools><button class="batch-result-resize" :aria-expanded="resultsExpanded" @click="resultsExpanded=!resultsExpanded" data-test="batch-expand-results">{{resultsExpanded?'收起结果面板':'展开结果面板'}}</button></template>
         <div>
           <template v-if="shownResult">
-            <MultiPeakResults hide-actions v-if="isMulti(shownRequest)" :result="shownResult as MultiResult" :accepted="latestAttempt?.manually_accepted" :selected-peak="selectedPeak" @select="selectedPeak=$event" :stale="false" :busy="selectedRun?.status==='running'" :unit="unit" /><XpsResults hide-actions v-else :result="shownResult as XpsResult" :accepted="latestAttempt?.manually_accepted" :selected-peak="selectedPeak" @select="selectedPeak=$event" :stale="false" :busy="selectedRun?.status==='running'" />
+            <MultiPeakResults :y-unit="units.y" hide-actions v-if="isMulti(shownRequest)" :result="shownResult as MultiResult" :accepted="latestAttempt?.manually_accepted" :selected-peak="selectedPeak" @select="selectedPeak=$event" :stale="false" :busy="selectedRun?.status==='running'" :unit="unit" /><XpsResults :y-unit="units.y" hide-actions v-else :result="shownResult as XpsResult" :accepted="latestAttempt?.manually_accepted" :selected-peak="selectedPeak" @select="selectedPeak=$event" :stale="false" :busy="selectedRun?.status==='running'" />
           </template>
           <p v-else class="hint">尚无拟合参数，完成拟合后显示。</p>
         </div>
@@ -680,3 +701,5 @@ fieldset{border:1px solid var(--ui-border);border-radius:6px;padding:14px;min-wi
 @media(max-width:900px){.batch-results-layout{grid-template-columns:minmax(0,1fr)}.batch-sidebar{position:static;max-height:none}.batch-list{max-height:260px}.batch-menu-content{right:auto;left:0}}
 @media(max-width:480px){.batch-toolbar{align-items:flex-start}.batch-toolbar .xps-actions{width:100%}.batch-detail-heading h3{flex-basis:100%}.batch-row-select{min-height:70px}}
 </style>
+
+<style scoped src="../styles/batchWorkbenchPresentation.css"></style>

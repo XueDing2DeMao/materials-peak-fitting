@@ -1,0 +1,104 @@
+/* 单谱结果的两张表共用列轴。只在可用宽度不足时由表容器滚动。 */
+.peak-table-status { display: none; }
+.single-result-workspace[data-result-view=parameters] .peak-table-tools.has-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--ui-space-1) var(--ui-space-3);
+}
+.single-result-workspace[data-result-view=parameters] .peak-table-status {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.single-result-workspace .result-area-toggle {
+  width: fit-content;
+  min-height: 28px;
+  margin: 0;
+  padding: 2px 0;
+  gap: var(--ui-space-2);
+  font-size: 12px;
+}
+.single-result-workspace .result-area-toggle input { width: 16px; height: 16px; margin: 0; }
+.single-result-workspace .peak-metric-scroll {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: auto;
+  container-type: inline-size;
+}
+.single-result-workspace .peak-metric-scroll .peak-metric-table {
+  width: 100%;
+  min-width: 496px;
+  margin: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+.single-result-workspace .peak-metric-scroll .has-total-column { min-width: 580px; }
+.single-result-workspace .peak-name-column { width: clamp(144px,24cqi,224px); }
+.single-result-workspace .peak-metric-table :is(th,td) {
+  padding: 5px var(--ui-space-2);
+  text-align: right;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--ui-border);
+}
+.single-result-workspace .peak-metric-table th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+}
+.single-result-workspace .peak-metric-table thead th {
+  background: var(--ui-subtle);
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  vertical-align: top;
+}
+.single-result-workspace .peak-metric-table thead th:first-child { background: var(--ui-subtle); }
+.single-result-workspace .peak-metric-table thead small {
+  display: block; font-size: 11px; line-height: 1.45; font-weight: 400; white-space: nowrap;
+}
+.single-result-workspace .peak-metric-table tbody th { background: var(--ui-surface); }
+.single-result-workspace .peak-metric-table :is(.is-selected,.peak-expanded) > * { background: var(--ui-selected); }
+.single-result-workspace .peak-metric-table td { white-space: normal; overflow-wrap: anywhere; }
+.single-result-workspace .peak-name-heading { padding-inline-start: 13px; }
+.single-result-workspace .peak-metric-table .peak-name-button {
+  display: grid;
+  grid-template-columns: 7px minmax(0,1fr);
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 26px;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-primary);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+}
+.single-result-workspace .peak-name-button:hover:not(:disabled) .peak-result-label { text-decoration: underline; }
+.peak-result-mark { display: none; }
+.single-result-workspace .peak-result-mark { display: block; width: 7px; height: 7px; border-radius: 50%; }
+.single-result-workspace .peak-result-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

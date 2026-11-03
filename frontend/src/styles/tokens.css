@@ -33,6 +33,10 @@
   --ui-space-4: 16px;
   --ui-space-6: 24px;
   --ui-space-8: 32px;
+  /* 桌面工作区共用外边距，紧凑操作与普通操作分级。 */
+  --ui-page-gutter: 20px;
+  --ui-toolbar-gap: var(--ui-space-2);
+  --ui-section-gap: var(--ui-space-4);
   --ui-sidebar: 320px;
   --plot-height: 370px;
   --plot-residual-height: 140px;

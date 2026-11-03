@@ -14,16 +14,33 @@ describe.each(['multi','xps'] as const)('%s 复用单峰范围交互',kind=>{
   it('默认平移，框选按数据点更新并自动退出，双击恢复手柄',async()=>{
     const w=chart();await flushPromises();const node=w.get(`[data-test="${kind==='multi'?'multi':'xps'}-plot"]`).element as any;
     expect(w.get('[data-test="range-selection-toggle"]').attributes('aria-pressed')).toBe('false');
-    await w.get('.compact-chart-tools-toggle').trigger('click');
+    expect((w.get('.spectrum-menu').element as HTMLElement).style.display).toBe('none');
+    await w.get('[data-test="spectrum-tools"]').trigger('click');
+    expect(w.get('[data-test="spectrum-tools"]').attributes('aria-expanded')).toBe('true');
+    expect((w.get('.spectrum-menu').element as HTMLElement).style.display).not.toBe('none');
     await w.get('[data-test="range-selection-toggle"]').trigger('click');await flushPromises();
     expect(w.find('.chart-canvas [data-test="range-selection-guide"]').exists()).toBe(false);
-    expect(w.get('.chart-mode-status [data-test="range-selection-guide"]').text()).toContain('水平拖动');
-    expect(w.get('.compact-chart-tools-toggle').attributes('aria-expanded')).toBe('false');
+    expect(w.get('[data-test="range-selection-guide"]').text()).toContain('水平拖动');
+    expect(w.get('[data-test="spectrum-tools"]').attributes('aria-expanded')).toBe('false');
     node.events.plotly_selected({points:[{x:6},{x:2},{x:4}]});await flushPromises();
     expect(w.emitted('range')?.at(-1)).toEqual([{start:2,end:6}]);
     expect(w.get('[data-test="range-selection-toggle"]').attributes('aria-pressed')).toBe('false');
     await w.get(`[data-test="${kind==='multi'?'multi':'xps'}-plot"]`).trigger('dblclick');await flushPromises();
     expect(w.find('[data-test="range-start-handle"]').exists()).toBe(true);
+  });
+  it('编辑菜单内 Esc 只关闭菜单，再次 Esc 退出当前编辑模式',async()=>{
+    const w=chart(), trigger=w.get('[data-test="spectrum-tools"]');
+    await trigger.trigger('click');
+    await w.get('[data-test="chart-add-peak"]').trigger('click');
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+    expect(w.get('[data-test="chart-browse"]').isVisible()).toBe(true);
+    await trigger.trigger('click');
+    await trigger.trigger('keydown',{key:'Escape'});
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+    expect(w.get('[data-test="chart-add-peak"]').attributes('aria-pressed')).toBe('true');
+    await trigger.trigger('keydown',{key:'Escape'});
+    expect(w.find('[data-test="chart-browse"]').exists()).toBe(false);
+    expect(w.get('[data-test="chart-add-peak"]').attributes('aria-pressed')).toBe('false');
   });
   it('边界拖动保持起终点语义，整体平移限于数据范围，Esc收起手柄',async()=>{
     const w=chart();await w.get('[data-test="spectrum-full"]').trigger('click');await w.get('[data-test="range-edit-toggle"]').trigger('click');await flushPromises();

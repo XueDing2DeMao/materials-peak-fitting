@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { createMultiConfig } from './multipeakState';
+import { createConfig } from './xpsState';
 async function input(){const modules=import.meta.glob('./batchInput.ts');expect(modules['./batchInput.ts']).toBeDefined();return await modules['./batchInput.ts']() as typeof import('./batchInput');}
 describe('批量数据快照',()=>{
+  it('XRD/XPS 阻止不兼容的 X 表头；保留显式正确与未标单位的谱线',async()=>{
+    const {prepareRequest}=await input(),data={x:[0,1,2,3],y:[0,1,2,0]};
+    const source=(label:string)=>({filename:'t',file_sha256:'a'.repeat(64),sheet:'s',x_column:label,y_column:'y'});
+    const xrd=createMultiConfig(data.x,data.y,null,'xrd'), xps=createConfig(data.x,data.y,null);
+    for(const [config,wrong,allowed] of [[xrd,'θ [rad]','θ [DEG]'],[xps,'E [keV]','E [EV]']] as const){
+      config.range_start=0;config.range_end=3;
+      expect(()=>prepareRequest(config,data,source(wrong),true)).toThrow('单位');
+      expect(prepareRequest(config,data,source(allowed),true).x).toEqual(data.x);
+      expect(prepareRequest(config,data,source('X'),true).x).toEqual(data.x);
+    }
+  });
   it('当前数据与来源独立，端点背景重新估计并撤销确认',async()=>{
     const {prepareRequest}=await input(),c=createMultiConfig([0,1,2,3],[0,1,2,0],null,'general');c.baseline.confirmed=true;
     const source={filename:'b.csv',file_sha256:'b'.repeat(64),sheet:'s',x_column:'x',y_column:'b'};

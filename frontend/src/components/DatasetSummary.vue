@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { axisUnitConflict, spectrumUnits } from "../spectrumUnits";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import type { DatasetInfo } from "../types";
 import DatasetTable from './DatasetTable.vue';
@@ -43,6 +44,9 @@ async function showPicker(event?:Event,tab:'data'|'audit'='data'){remember(event
 function closePicker(restoreFocus=true){const wasOpen=pickerOpen.value||picker.value?.open;pickerOpen.value=false;if(picker.value?.open)picker.value.close();if(restoreFocus&&wasOpen)void nextTick(()=>{(trigger?.isConnected?trigger:sourceAction.value)?.focus({preventScroll:true});});}
 watch(pickerOpen,async open=>{await nextTick();if(open&&pickerOpen.value&&picker.value&&!picker.value.open)picker.value.showModal();else if(!open&&picker.value?.open)picker.value.close();});
 onBeforeUnmount(()=>closePicker(false));
+const unitMode=computed(()=>props.analysisMode==='single'||!props.analysisMode?'general':props.analysisMode);
+const selectedUnits=computed(()=>spectrumUnits(unitMode.value,{x_column:xColumn.value,y_column:yColumn.value}));
+const unitConflict=computed(()=>axisUnitConflict(unitMode.value,xColumn.value));
 const unitHint=computed(()=>props.analysisMode==='xrd'?'X 列须为 2θ（°）':props.analysisMode==='xps'?'X 列须为结合能（eV）':'X 列保留原数据单位，请核对坐标含义');
 const busy = computed(() => props.loading || props.previewLoading);
 
@@ -90,7 +94,7 @@ function openFilePicker(event?:Event): void {
 }
 
 function applySelection(): void {
-  if (!busy.value && sheetName.value && xColumn.value && yColumn.value && xColumn.value !== yColumn.value) {
+  if (!busy.value && !unitConflict.value && sheetName.value && xColumn.value && yColumn.value && xColumn.value !== yColumn.value) {
     emit("preview", { sheet: sheetName.value, xColumn: xColumn.value, yColumn: yColumn.value });
   }
 }
@@ -127,7 +131,8 @@ function applySelection(): void {
           <label>X 列<select v-model="xColumn" :disabled="busy||isSnapshot"><option v-for="column in sheet?.numeric_columns" :key="column" :value="column">{{column}}</option></select></label>
           <label>Y 列<select v-model="yColumn" :disabled="busy||isSnapshot"><option v-for="column in sheet?.numeric_columns" :key="column" :value="column">{{column}}</option></select></label>
         </div>
-        <p class="hint">{{unitHint}}；切换分析类型不会转换数据或单位。</p>
+        <p class="hint">{{unitHint}}；切换分析类型不会转换数据或单位。X：{{selectedUnits.x}}，Y：{{selectedUnits.y}}。通用谱可在源表头注明单位，如“位移 [cm⁻¹]”“强度 [counts/s]”。</p>
+        <p v-if="unitConflict" role="alert" class="error">{{unitConflict}}</p>
         <p v-if="pending&&!isSnapshot" class="selection-pending" role="status">{{pendingFile?`待应用文件：${dataset.filename}。`:''}}建议选择待应用；当前图表保持原数据。</p>
         <p v-if="!sheet||sheet.numeric_columns.length<2" class="dataset-error">没有可用的 X/Y 数值列组合，请选择其他工作表或文件。</p>
         <p v-if="xColumn&&xColumn===yColumn" class="dataset-error">X/Y 须选择不同的数值列。</p>
@@ -139,7 +144,7 @@ function applySelection(): void {
           <DatasetAuditSummary :audit="audit" expanded />
         </div>
       </div>
-      <footer class="parameter-dialog-footer"><p class="hint">{{detailTab==='audit'?'清理记录对应当前图表；切换标签不会应用列选择。':isSnapshot?'仅包含已保存的谱列；其他数据请重新导入原文件。':'浏览与翻页不会替换当前谱线。'}}</p><div class="xps-actions"><button data-test="cancel-selection" :disabled="busy" @click="cancelSelection">{{isSnapshot||detailTab==='audit'?'关闭':'取消'}}</button><button v-if="!isSnapshot" v-show="detailTab==='data'" data-test="apply-selection" class="primary" :disabled="busy||!xColumn||!yColumn||xColumn===yColumn" @click="applySelection">{{previewLoading?'正在应用…':'应用到图表'}}</button></div></footer>
+      <footer class="parameter-dialog-footer"><p class="hint">{{detailTab==='audit'?'清理记录对应当前图表；切换标签不会应用列选择。':isSnapshot?'仅包含已保存的谱列；其他数据请重新导入原文件。':'浏览与翻页不会替换当前谱线。'}}</p><div class="xps-actions"><button data-test="cancel-selection" :disabled="busy" @click="cancelSelection">{{isSnapshot||detailTab==='audit'?'关闭':'取消'}}</button><button v-if="!isSnapshot" v-show="detailTab==='data'" data-test="apply-selection" class="primary" :disabled="busy||Boolean(unitConflict)||!xColumn||!yColumn||xColumn===yColumn" @click="applySelection">{{previewLoading?'正在应用…':'应用到图表'}}</button></div></footer>
     </dialog>
   </section>
 </template>

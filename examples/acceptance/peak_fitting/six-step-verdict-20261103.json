@@ -1,0 +1,103 @@
+{
+  "date": "2026-11-03",
+  "scope": "本轮判定限于本机、原验收样例包预设容差及明确标注的补充用例。",
+  "conclusion": "本机样例复测六步骤全部通过；上一轮步骤 4 的边界不确定度问题已修复。",
+  "rows": [
+    {
+      "step": 1,
+      "name": "准备工作",
+      "expected": "页面和计算服务正常，样例、参考值、测试环境及允许误差明确。",
+      "actual": "修复后重新启动页面与计算服务，5175/5176 均返回 HTTP 200。原验收包 30 个文件的 SHA256 全部吻合，继续使用包内原定容差。记录环境版本及本轮源文件哈希。",
+      "verdict": "通过",
+      "evidence": [
+        "environment.json",
+        "package-check.json",
+        "source-sha256.json"
+      ]
+    },
+    {
+      "step": 2,
+      "name": "谱数据导入与校验",
+      "expected": "CSV、TXT、TSV、DAT、XY、XYE、XLS、XLSX、XLSM 识别正确；工作表和 X/Y 可选；异常明确提示，无丢点、错列。",
+      "actual": "九种格式各 5 对数据逐点一致；浏览器重新上传及选列正常。空文件、列数不符、混合坏值、同列、缺列、无表头首点及多工作表均重新核验，接口 18/18 通过；九格式及两异常样本的浏览器检查通过。",
+      "verdict": "通过",
+      "evidence": [
+        "step2-results.json",
+        "step6-ui-results.json",
+        "ui/invalid-malformed.png"
+      ]
+    },
+    {
+      "step": 3,
+      "name": "基线处理与参数初始化",
+      "expected": "无基线、常数、直线、多项式、Spline、B-Spline 正常；锚点、区间及可调整的初值生效。",
+      "actual": "6 种基线逐点核对，最大绝对差 7.11×10⁻¹⁵；扣背景后参数均回收。原包自动初值为峰位 5°、FWHM 1.201481°、面积 102.349716 counts/s × °。初值可调整，2–8° 区间保留 121 点。步骤 3 数值检查 13/13 通过。",
+      "verdict": "通过",
+      "evidence": [
+        "step3-5-numerics.json",
+        "ui/02-baseline.png",
+        "ui/03-initial.png"
+      ]
+    },
+    {
+      "step": 4,
+      "name": "单峰拟合与模型比较",
+      "expected": "Gaussian、Lorentz 收敛；初值、区间、固定及上下限有效；参数及不确定度正确。边界上普通线性估计不适用时须留空并解释，可同口径比较模型。",
+      "actual": "步骤 4 数值检查 26/26 通过。原失败用例 A=95、w=1.3、固定 xc=5，约束继续生效；A/w 的标准误和 95% CI 均为空，提示“存在贴边参数，线性协方差不适用”。两模型八类边界、正常内部解、固定参数和独立解析误差核验全部通过；实际界面及参数 CSV 一致。Gaussian 谱两模型 RMSE 为 0.050252 / 3.979555。",
+      "verdict": "通过",
+      "evidence": [
+        "step3-5-numerics.json",
+        "step4-bound-ui-results.json",
+        "ui/09-bound-ci-corrected.png",
+        "downloads/bound-parameters.csv"
+      ]
+    },
+    {
+      "step": 5,
+      "name": "拟合结果评价",
+      "expected": "原始谱、基线、净峰、总拟合、残差对应正确；误差、异常点数和关键参数满足参考容差。",
+      "actual": "包内标准谱四项参数均在原定容差内。201 点曲线与实际响应逐点一致，曲线恒等式最大差 1.42×10⁻¹⁴；RMSE、SSE 独立重算一致，正常谱异常数 0、注入单异常点后为 1。33 条 Raman 与 3 份演示实谱重新求解，全部收敛；对第三方存档记录偏差。",
+      "verdict": "通过（包内容差）",
+      "evidence": [
+        "step3-5-numerics.json",
+        "step5-reference.json",
+        "ui/04-single-fit.png",
+        "ui/04b-parameter-uncertainty.png"
+      ]
+    },
+    {
+      "step": 6,
+      "name": "结果导出与核验",
+      "expected": "单谱及批量曲线 CSV、参数 CSV、PNG 正常打开，曲线、参数、单位及不确定度说明与界面一致，无遗漏错位。",
+      "actual": "实际下载单谱和两条谱的批量结果。单谱/整批/当前谱曲线为 201/402/201 行，整批/当前谱参数为 46/23 行；数值、°、counts/s、SE/CI 逐项一致。单谱 PNG 2800×1600，两张批量 PNG 2800×1800，均可解码。边界导出正确保留空 SE/CI 与原因。两轮浏览器流程页面错误均为 0。",
+      "verdict": "通过",
+      "evidence": [
+        "step6-ui-results.json",
+        "downloads/single/curves.csv",
+        "downloads/batch/all-parameters.csv",
+        "downloads/batch/all-curves.csv",
+        "downloads/batch/spec1.png",
+        "downloads/bound-parameters.csv"
+      ]
+    }
+  ],
+  "formal_limits": [
+    "本轮判定限于本机、原验收样例包预设容差及明确标注的补充用例。",
+    "实谱第三方对照未规定正式允许误差，本次记录差异，不作正式精度合格判定。",
+    "Fityk 使用已核验哈希的 2026-09-20 存档，本次未重新运行 Fityk。",
+    "原表指定的 D3-202 现场、仪器及 2027 年 10 月计划仍需现场执行。"
+  ],
+  "cases": {
+    "imports": {
+      "passed": 18,
+      "total": 18
+    },
+    "numerics": {
+      "passed": 41,
+      "total": 41
+    },
+    "backend_tests": 146,
+    "frontend_tests": 17
+  },
+  "generated_at": "2026-11-03T15:02:29.243449+08:00"
+}

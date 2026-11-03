@@ -1,4 +1,4 @@
-import { componentLine, FIGURE_FONT } from './figureStyle';
+import { componentLine, FIGURE_COLORS, FIGURE_FONT } from './figureStyle';
 
 // 仅表示输入／结果中的 xc，不把非对称峰的 xc 解释为实际峰顶。
 export interface AnnotatedPeak {
@@ -18,7 +18,7 @@ export function peakAnnotations(peaks: AnnotatedPeak[], start: number, end: numb
       text: `${id}<br>${Number(x.toPrecision(6))}${unit}`, showarrow: false,
       xanchor: 'center', yanchor: 'top', captureevents: false,
       bgcolor: 'rgba(255,255,255,.9)', borderpad: 2,
-      font: { family: FIGURE_FONT, size: 11, color: componentLine(p.id).color },
+      font: { family: FIGURE_FONT, size: 11, color: FIGURE_COLORS.ink },
     };
   });
   const shapes = visible.map(p => ({

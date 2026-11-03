@@ -10,6 +10,14 @@ const mounted:Array<{unmount:()=>void}>=[];
 afterEach(()=>mounted.splice(0).forEach(w=>w.unmount()));
 const result:any={x,raw_y:y,parameters:{wG:{value:1,standard_error:null},wL:{value:4,standard_error:null}},statistics:{r_squared:1,rmse:0,sse:0,adjusted_r_squared:1},model:'psd_voigt2',converged:true,message:'done'};
 describe('峰性质和非对称模型交互',()=>{
+  it('结果里显示净峰高的标准误、95% 区间及其强度单位',()=>{
+    const r={...result,peak_geometry:{peak_height:5,reasons:{},warnings:[],
+      peak_height_uncertainty:{standard_error:.125,confidence_interval:[4.75,5.25],reason:null}}};
+    const w=mount(ResultsPanel,{props:{result:r,units:{x:'°',y:'counts/s'}}});mounted.push(w);
+    const row=w.get('[data-test="height-uncertainty"]').text();
+    expect(row).toContain('0.125000 counts/s');
+    expect(row).toContain('4.75000 — 5.25000 counts/s');
+  });
   it('结果摘要使用连续峰顶与整体宽度，并保留醒目的诊断和过期导出保护', async()=>{
     const r={...result,model:'emg_high',parameters:{xc:{value:2,standard_error:null}},peak_geometry:{peak_position:2.7,fwhm:3.4,area_total:10,reasons:{},warnings:['半高点超出拟合区间']},statistics:{...result.statistics,has_trend:true},analysis_metadata:{uncertainty_warning:'参数标准误不可用'}};
     const w=mount(ResultsPanel,{props:{result:r}});mounted.push(w);

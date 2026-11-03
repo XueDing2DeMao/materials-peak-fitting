@@ -73,14 +73,14 @@ describe('集中 X/Y 选择弹窗',()=>{
   it('等待文件读取完成后打开；X/Y 互斥、非数值禁选，切换文件保留选择',async()=>{
     const {w,drafts}=await setup(undefined,true);expect(w.get('.batch-column-dialog').attributes('open')).toBeUndefined();
     await w.setProps({disabled:false});await flushPromises();expect(w.get('.batch-column-dialog').attributes('open')).toBeDefined();
-    expect(w.get('[aria-label="a.csv / data X 列 note"]').attributes('disabled')).toBeDefined();
+    expect(w.get('[aria-label="a.csv / data X 列"]').findAll('option').map(o=>o.element.value)).not.toContain('note');
     expect(w.get('[aria-label="a.csv / data 纳入 x"]').attributes('disabled')).toBeDefined();
     await w.get('[aria-label="a.csv / data 纳入 signal"]').setValue(true);
-    await w.get('[aria-label="a.csv / data X 列 signal"]').setValue(true);expect(drafts[0].yColumns).toEqual([]);
+    await w.get('[aria-label="a.csv / data X 列"]').setValue('signal');expect(drafts[0].yColumns).toEqual([]);
     await w.get('[aria-label="a.csv / data 纳入 x"]').setValue(true);
-    await w.get('[aria-label="配置文件 b.csv"]').trigger('click');await w.get('[aria-label="b.csv / data 纳入 signal"]').setValue(true);
-    await w.get('[aria-label="配置文件 a.csv"]').trigger('click');
-    expect((w.get('[aria-label="a.csv / data X 列 signal"]').element as HTMLInputElement).checked).toBe(true);
+    await w.get('[data-file-name="b.csv"]').trigger('click');await w.get('[aria-label="b.csv / data 纳入 signal"]').setValue(true);
+    await w.get('[data-file-name="a.csv"]').trigger('click');
+    expect((w.get('[aria-label="a.csv / data X 列"]').element as HTMLSelectElement).value).toBe('signal');
     expect((w.get('[aria-label="a.csv / data 纳入 x"]').element as HTMLInputElement).checked).toBe(true);
     expect(w.get('.column-picker-footer').text()).toContain('已选 2 个文件 · 将新增 2 条有效谱线');
     expect(w.get('[data-test="batch-mapping-progress"]').text()).toContain('已配置 2 / 2 个文件');
@@ -91,7 +91,7 @@ describe('集中 X/Y 选择弹窗',()=>{
     await w.get('[aria-label="配置工作表"]').setValue(drafts[1].key);await w.get('[aria-label="book.xlsx / second 纳入 signal"]').setValue(true);
     await w.get('[placeholder="输入列名"]').setValue('error');expect(w.findAll('.column-role-table tbody tr')).toHaveLength(1);
     await w.get('[placeholder="输入文件名"]').setValue('b.csv');expect(w.findAll('.column-file-list>button')).toHaveLength(1);expect(drafts[1].yColumns).toEqual(['signal']);
-    await w.get('[aria-label="配置文件 b.csv"]').trigger('click');await w.get('[placeholder="输入文件名"]').setValue('');await w.get('[aria-label="配置文件 book.xlsx"]').trigger('click');
+    await w.get('[data-file-name="b.csv"]').trigger('click');await w.get('[placeholder="输入文件名"]').setValue('');await w.get('[data-file-name="book.xlsx"]').trigger('click');
     expect((w.get('[aria-label="配置工作表"]').element as HTMLSelectElement).value).toBe(drafts[1].key);
     await w.get('.batch-column-dialog').trigger('cancel');await flushPromises();expect(w.emitted('cancel')).toBeUndefined();expect(w.emitted('commit')).toBeUndefined();
     expect(document.activeElement).toBe(w.get('.selection-launcher>button').element);expect(drafts[1].yColumns).toEqual(['signal']);
@@ -106,10 +106,10 @@ describe('集中 X/Y 选择弹窗',()=>{
     await w.get('[aria-label="应用规则到 excluded.csv / data"]').setValue(false);
     await button(w,'应用到 1 个匹配工作表').trigger('click');
     expect(drafts[1].yColumns).toEqual(['signal']);expect(drafts[2].yColumns).toEqual(['other']);expect(drafts[3].yColumns).toEqual(['error']);
-    expect(w.get('[aria-label="配置文件 bad.csv"]').text()).toContain('需处理');
+    expect(w.get('[data-file-name="bad.csv"]').text()).toContain('需处理');
     await button(w,'应用列规则到其他文件…').trigger('click');await w.get('[aria-label="列规则匹配方式"]').setValue('position');
     expect(w.get('[aria-label="批量列规则预览"]').text()).toContain('X：angle → Y：other');
-    await button(w,'应用到 3 个匹配工作表').trigger('click');expect(drafts[2].xColumn).toBe('angle');expect(w.get('[aria-label="配置文件 bad.csv"]').text()).not.toContain('需处理');
+    await button(w,'应用到 3 个匹配工作表').trigger('click');expect(drafts[2].xColumn).toBe('angle');expect(w.get('[data-file-name="bad.csv"]').text()).not.toContain('需处理');
     await w.get('[data-test="batch-commit-selection"]').trigger('click');expect(w.emitted('commit')?.[0][0]).toHaveLength(4);
   });
   it('重复选择提示、100 条限额与忙碌状态仍阻止无效提交',async()=>{

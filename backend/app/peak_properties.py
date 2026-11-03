@@ -85,6 +85,8 @@ def peak_geometry(model: str, p: Mapping[str, float], low: float, high: float) -
     result.update(range_start=low, range_end=high, halfmax_within_range=None, reasons={}, warnings=[],
                   area_method='模型积分（解析原函数/CDF）', width_method='连续模型半高交点',
                   uncertainty_note='派生量未计算标准误；全域面积包含区间外模型外推')
+    result['peak_height_uncertainty'] = {'standard_error': None, 'confidence_interval': None,
+        'reason': '未提供拟合协方差' if model in ('gaussian','lorentz') else '当前模型未实现净峰高的不确定度传播'}
     area = float(p['A'])
     result['area_total'] = area
     if area == 0:
@@ -117,12 +119,81 @@ def peak_geometry(model: str, p: Mapping[str, float], low: float, high: float) -
     return result
 
 
-def geometry_rows(geometry: dict):
+def quantity_unit(name: str, x_unit: str, y_unit: str) -> str:
+    if name in {'xc','w','wG','wL','h_low','h_high','sigma','tau','fwhm','hwhm_low','hwhm_high',
+                'halfmax_low','halfmax_high','peak_position','range_start','range_end','w_fwhm','wG_fwhm','wL_fwhm'}:
+        return x_unit
+    if name in {'peak_height','height','rmse','residual_mean','residual_standard_deviation'}:
+        return y_unit
+    if name in {'A','area_total','area_in_range','area_window'}:
+        return f'{y_unit} × {x_unit}'
+    if name in {'sse','rss','residual_variance','reduced_chi_square'}:
+        return f'({y_unit})²'
+    if name in {'mu','area_fraction_in_range','area_fraction_window','r_squared','adjusted_r_squared','durbin_watson'}:
+        return '无量纲'
+    return ''
+
+
+def add_height_uncertainty(geometry, model, values, free_terms, covariance, t_factor, reason=None):
+    """对净峰 H=C*A/w 按独立自由参数传播。free_terms 保留关联参数对根变量的导数。"""
+    if model not in ('gaussian', 'lorentz'):
+        return
+    estimate = geometry['peak_height_uncertainty']
+    geometry['uncertainty_note'] = '净峰高采用固定基线和当前模型下的一阶协方差传播；全域面积包含区间外模型外推'
+    if not free_terms:
+        estimate['reason'] = '面积和宽度均固定，峰高未参与估计'
+        return
+    height = geometry['peak_height']
+    if reason or covariance is None or t_factor is None or height is None:
+        estimate['reason'] = reason or '缺少有效峰高、协方差或残差自由度'
+        return
+    factor = np.sqrt(4*np.log(2)/np.pi) if model == 'gaussian' else 2/np.pi
+    slopes = {'A': factor/values['w'], 'w': -height/values['w']}
+    gradient = np.zeros(len(covariance))
+    for name, (index, scale) in free_terms.items():
+        gradient[index] += slopes[name]*scale
+    variance = float(gradient @ covariance @ gradient)
+    if not np.isfinite(variance) or variance < 0:
+        estimate['reason'] = '协方差传播未得到有效峰高方差'
+        return
+    se = float(np.sqrt(variance))
+    limits = [float(height - t_factor*se), float(height + t_factor*se)]
+    if not np.all(np.isfinite(limits)):
+        estimate['reason'] = '峰高置信限超出数值范围'
+        return
+    estimate.update(standard_error=se, confidence_interval=limits, reason=None)
+
+
+def geometry_rows(geometry: dict, x_unit='X 单位', y_unit='Y 单位'):
     """CSV 使用独立名字、单位口径和缺失原因，避免混淆旧采样积分。"""
     for key, value in geometry.items():
-        if key in ('reasons','warnings'): continue
-        unit = 'Y 单位 × X 单位' if key in ('area_total','area_in_range') else (
-            'Y 单位' if key == 'peak_height' else '无量纲' if key == 'area_fraction_in_range' else
-            'X 单位' if key in ('peak_position','fwhm','hwhm_low','hwhm_high','halfmax_low','halfmax_high','range_start','range_end') else '')
-        yield [f'geometry.{key}',value,unit,geometry.get('reasons',{}).get(key,'')]
+        if key in ('reasons','warnings','peak_height_uncertainty'): continue
+        row = [f'geometry.{key}',value,quantity_unit(key,x_unit,y_unit),geometry.get('reasons',{}).get(key,'')]
+        if key == 'peak_height':
+            error,lower,upper,reason = height_error_cells(geometry)
+            row[3] = reason or row[3]
+            row.extend([error,lower,upper])
+        yield row
     for warning in geometry.get('warnings',[]): yield ['geometry.warning',warning,'','']
+
+
+def height_error_cells(geometry: dict):
+    estimate = geometry.get('peak_height_uncertainty')
+    if not estimate:
+        return [None,None,None,'历史结果未记录峰高不确定度']
+    return [estimate.get('standard_error'), *(estimate.get('confidence_interval') or [None,None]), estimate.get('reason')]
+
+
+def derived_error_cells(name, model, parameters, geometry):
+    """仅在派生量等于某一模型参数时继承其边际不确定度。"""
+    if name in ('height','peak_height'):
+        return height_error_cells(geometry)
+    alias = {'area_total':'A','w_fwhm':'w','wG_fwhm':'wG','wL_fwhm':'wL'}.get(name)
+    if name=='fwhm' and model in ('gaussian','lorentz','psd_voigt1'):
+        alias = 'w'
+    p = parameters.get(alias)
+    if not p:
+        return [None,None,None,'派生性质未计算标准误和置信区间']
+    ci = p.get('confidence_interval')
+    reason = p.get('uncertainty_reason') or (None if ci else '结果未记录 95% 置信区间')
+    return [p.get('standard_error'), *(ci or [None,None]), reason]

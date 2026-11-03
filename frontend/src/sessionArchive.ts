@@ -54,7 +54,22 @@ function request(c:any){
   }
 }
 const sameData=(a:BatchRequest,b:BatchRequest)=>JSON.stringify([a.source,a.x,a.y])===JSON.stringify([b.source,b.x,b.y]);
-function geometry(g:any){if(g===undefined)return;object(g,'峰性质');for(const key of ['peak_position','peak_height','fwhm','hwhm_low','hwhm_high','halfmax_low','halfmax_high','area_total','area_in_range','area_fraction_in_range'])if(g[key]!==null)number(g[key],`峰性质 ${key}`);object(g.reasons,'峰性质原因');array(g.warnings,'峰性质警告');g.warnings.forEach((v:any)=>string(v,'峰性质警告'));for(const k of ['area_method','width_method','uncertainty_note'])string(g[k],k);}
+function geometry(g:any){
+  if(g===undefined)return;
+  object(g,'峰性质');
+  for(const key of ['peak_position','peak_height','fwhm','hwhm_low','hwhm_high','halfmax_low','halfmax_high','area_total','area_in_range','area_fraction_in_range'])if(g[key]!==null)number(g[key],`峰性质 ${key}`);
+  object(g.reasons,'峰性质原因');array(g.warnings,'峰性质警告');g.warnings.forEach((v:any)=>string(v,'峰性质警告'));
+  for(const k of ['area_method','width_method','uncertainty_note'])string(g[k],k);
+  const u=g.peak_height_uncertainty;
+  if(u===undefined)return;
+  object(u,'峰高不确定度');
+  if(u.standard_error!==null){number(u.standard_error,'峰高标准误');if(u.standard_error<0)fail('峰高标准误');}
+  if(u.confidence_interval!==null){
+    vector(u.confidence_interval,'峰高置信区间');
+    if(u.confidence_interval.length!==2||u.confidence_interval[0]>u.confidence_interval[1])fail('峰高置信区间');
+  }
+  if(u.reason!==null)string(u.reason,'峰高标准误说明');
+}
 function parameters(p:any){object(p,'结果参数');for(const v of Object.values(p) as any[]){object(v,'结果参数项');number(v.value,'结果参数值');bool(v.fixed,'结果固定状态');if(v.uncertainty_reason!=null)string(v.uncertainty_reason,'标准误说明');if(v.standard_error!==null)number(v.standard_error,'标准误');if(v.confidence_interval!=null){vector(v.confidence_interval,'置信区间');if(v.confidence_interval.length!==2)fail('置信区间');}}}
 function result(r:any,engine:string,c:BatchRequest){
   object(r,'结果');for(const key of ['x','raw_y','baseline','total_y'])vector(r[key],`结果 ${key}`);const n=r.x.length;if(!n||['raw_y','baseline','total_y'].some(k=>r[k].length!==n))fail('结果数组长度');bool(r.converged,'收敛状态');string(r.message,'求解信息');object(r.statistics,'统计量');number(r.statistics.rmse,'结果 RMSE');for(const value of Object.values(r.statistics))if(value!==null&&typeof value!=='boolean')number(value,'统计量');

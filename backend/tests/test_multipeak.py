@@ -51,6 +51,24 @@ class MultiPeakTests(unittest.TestCase):
         self.assertEqual(r['statistics']['free_parameters'],4)
         self.assertAlmostEqual(r['components'][1]['parameters']['xc']['value']-r['components'][0]['parameters']['xc']['value'],1.4)
 
+    def test_conditional_95_intervals_follow_independent_degrees_of_freedom(self):
+        from scipy.stats import t
+        p = fixture()
+        p['y'] = (np.asarray(p['y']) + np.random.default_rng(48).normal(0, .15, len(p['y']))).tolist()
+        p['constraints'] = [dict(source=dict(component='p1', parameter='A'), target=dict(component='p2', parameter='A'), kind='ratio', value=.625)]
+        p['components'][0]['parameters']['xc'] = dict(value=5, fixed=True)
+        r = self.fit(p)
+        factor = t.ppf(.975, len(p['y'])-4)
+        first, second = [c['parameters'] for c in r['components']]
+        for par in (first['A'], second['A']):
+            se = par['standard_error']
+            self.assertGreater(se, 0)
+            self.assertIn('confidence_interval', par)
+            np.testing.assert_allclose(par['confidence_interval'], [par['value']-factor*se, par['value']+factor*se])
+        np.testing.assert_allclose(second['A']['confidence_interval'], np.array(first['A']['confidence_interval'])*.625)
+        self.assertIsNone(first['xc']['confidence_interval'])
+        self.assertEqual(first['xc']['uncertainty_reason'], '固定参数')
+
     def test_psdvoigt2_width_ratio(self):
         p = fixture()
         x = np.array(p['x'])
@@ -63,6 +81,18 @@ class MultiPeakTests(unittest.TestCase):
         self.assertTrue(r['converged'])
         self.assertLess(r['statistics']['rmse'],1e-5)
         self.assertAlmostEqual(r['components'][1]['parameters']['wG']['value']/r['components'][0]['parameters']['wG']['value'],1.2)
+
+    def test_height_uncertainty_propagates_related_area_and_width(self):
+        p=fixture()
+        p['y']=(np.array(p['y'])+np.random.default_rng(408).normal(0,.08,len(p['y']))).tolist()
+        p['constraints']=[dict(source=dict(component='p1',parameter=name),
+                               target=dict(component='p2',parameter=name), kind='ratio',value=ratio)
+                          for name,ratio in [('A',.625),('w',.8)]]
+        result=self.fit(p)
+        first,second=[c['peak_geometry']['peak_height_uncertainty'] for c in result['components']]
+        self.assertGreater(first['standard_error'],0)
+        self.assertAlmostEqual(second['standard_error'],first['standard_error']*.625/.8)
+        np.testing.assert_allclose(second['confidence_interval'],np.array(first['confidence_interval'])*.625/.8)
 
     def test_reject_bad_data_and_unreviewed_background(self):
         for change, message in [({'x':[0]*501},'X'),({'components':[]},'峰'),({'baseline':{'kind':'line','confirmed':False}},'复核')]:
@@ -84,6 +114,10 @@ class MultiPeakTests(unittest.TestCase):
             c['parameters']={k:{**v,'fixed':k!='A'} for k,v in c['parameters'].items()}
         r=self.fit(p)
         self.assertFalse(r['diagnostics']['identifiable'])
+        for c in r['components']:
+            uncertainty=c['peak_geometry']['peak_height_uncertainty']
+            self.assertIsNone(uncertainty['standard_error'])
+            self.assertIn('秩',uncertainty['reason'])
 
     def test_preview_and_candidates_without_components(self):
         p=fixture();p['components']=[]

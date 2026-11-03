@@ -31,9 +31,9 @@ def main():
     for f in manifest["files"]:
         assert hashlib.sha256((DATA / f["file"]).read_bytes()).hexdigest() == f["sha256"], f["file"]
     summaries = []
-    for name, filename, sheet, xcol, ycol, interval in [
-        ("raman", "Raman.xlsx", "Bare Ge", "Wavenumber", "Pristine #1", (280, 320)),
-        ("xrd", "XRD.xlsx", "BareGe", "2Theta", "Pristine Ge", (65.8, 66.6)),
+    for name, filename, sheet, xcol, ycol, interval, x_unit, y_unit in [
+        ("raman", "Raman.xlsx", "Bare Ge", "Wavenumber", "Pristine #1", (280, 320), "cm⁻¹", "CCD counts"),
+        ("xrd", "XRD.xlsx", "BareGe", "2Theta", "Pristine Ge", (65.8, 66.6), "°", "原始强度单位"),
     ]:
         book = parse_upload(filename, (DATA / filename).read_bytes())
         x, y = select_xy(book, sheet, xcol, ycol)
@@ -42,7 +42,10 @@ def main():
         request.initial_parameters = analyze_single_peak(request).initial_parameters
         result = fit_result_to_dict(fit_single_peak(request))
         assert result["converged"], name
+        # 单位来自上述工作表第二行。XRD 的 Y 仅标为 Intensity，未指定计数标度。
+        result["analysis_metadata"].update(x_unit=x_unit, y_unit=y_unit)
         source = {"file": filename, "sheet": sheet, "x_column": xcol, "y_column": ycol,
+                  "x_unit": x_unit, "y_unit": y_unit,
                   "requested_range": list(interval), "valid_full_spectrum_points": len(x),
                   "selected_points": len(result["x"]), "selection_reason": "手册演示单峰操作所选的单条原谱与局部峰区；非总体统计",
                   "preprocessing": "数值化、去除无效配对行、按 X 排序；未平滑、未归一化、未合并重复测量",

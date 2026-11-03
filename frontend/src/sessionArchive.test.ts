@@ -24,6 +24,14 @@ describe('独立本地会话格式',()=>{
     const c=single();c.result!.configuration=structuredClone(c.result!.configuration);c.result!.configuration.solver.max_nfev+=1;expect(()=>writeSession(c)).toThrow('配置快照');
   });
   it('单谱结果与配置完整往返，不依赖 dataset_id 或网络',()=>{const w=single(),text=writeSession(w),a=readSession(text);expect(a.workspace).toEqual(w);expect(a.read_only).toBe(false);expect(text).not.toContain('dataset_id');});
+  it('兼容旧峰性质，拒绝损坏的峰高置信区间',()=>{
+    const w=single(),r=w.result!.result as any;
+    const g=r.components[0].peak_geometry;
+    g.peak_height_uncertainty={standard_error:1,confidence_interval:[2,6],reason:null};
+    expect(readSession(writeSession(w)).workspace).toEqual(w);
+    g.peak_height_uncertainty.confidence_interval='损坏';
+    expect(()=>writeSession(w)).toThrow('峰高置信区间');
+  });
   it('损坏、旧追溯格式、未知版本和观察值错配均拒绝，不改变原对象',()=>{
     const w=single(),original=JSON.stringify(w),a=JSON.parse(writeSession(w));
     expect(()=>readSession('{')).toThrow();expect(()=>readSession('{"template_version":2,"rows":[]}')).toThrow();

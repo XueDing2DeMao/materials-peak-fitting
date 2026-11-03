@@ -31,13 +31,13 @@ describe('峰参数弹窗', () => {
     config.constraints.push({source:{component:'p1',parameter:'xc'},target:{component:'p2',parameter:'xc'},kind:'offset',value:.2});
     const before=JSON.parse(JSON.stringify({components:config.components,constraints:config.constraints}));
     const w=mount(MultiPeakControls,{props:{config,preview:null,busy:false,candidates:[]}});wrappers.push(w);
-    const dialog=w.get('dialog').element as HTMLDialogElement;dialog.showModal=()=>dialog.setAttribute('open','');dialog.close=()=>{dialog.removeAttribute('open');dialog.dispatchEvent(new Event('close'));};
+    const dialog=w.get('dialog[aria-label="全部峰参数"]').element as HTMLDialogElement;dialog.showModal=()=>dialog.setAttribute('open','');dialog.close=()=>{dialog.removeAttribute('open');dialog.dispatchEvent(new Event('close'));};
     await w.get('[data-test="edit-all-peaks"]').trigger('click');await w.get('[aria-label="p1 显示标签"]').setValue('误改');await w.get('[aria-label="参数表启用 p2"]').setValue(false);
     await w.get('[data-test="all-peaks-model"]').setValue('emg_high');await w.get('[aria-label="p1 A 初值"]').setValue(90);
-    config.constraints.splice(0);await w.get('[data-test="undo-parameters"]').trigger('click');
+    config.constraints.splice(0);await w.get('dialog[aria-label="全部峰参数"] [data-test="undo-parameters"]').trigger('click');
     expect({components:config.components,constraints:config.constraints}).toEqual(before);expect(w.emitted('model')?.at(-1)).toEqual(['psd_voigt1']);
     const next=reactive(createMultiConfig([5,6,7,8],[0,2,1,0],null,'general'));addMultiComponent(next);await w.setProps({config:next});
-    expect(dialog.open).toBe(false);await w.get('[data-test="undo-parameters"]').trigger('click');expect(next.components[0].parameters.xc?.value).toBe(6);
+    expect(dialog.open).toBe(false);await w.get('dialog[aria-label="全部峰参数"] [data-test="undo-parameters"]').trigger('click');expect(next.components[0].parameters.xc?.value).toBe(6);
   });
   it('一个弹窗并列编辑所有峰，完成和原生关闭保留独立参数并返回焦点', async () => {
     const config = reactive(createMultiConfig([0, 1, 2, 3], [0, 5, 2, 0], null, 'xrd'));

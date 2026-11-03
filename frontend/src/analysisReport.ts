@@ -1,4 +1,4 @@
-import {snapshotPeaks,snapshotUnit,type AnalysisSnapshot} from './analysisSnapshot';
+import {snapshotPeaks,snapshotUnit,snapshotUnits,type AnalysisSnapshot} from './analysisSnapshot';
 import {resultDiagnostics} from './resultDiagnostics';
 import {samplingDiagnostics} from './samplingDiagnostics';
 import {formatResultNumber as number} from './resultPresentation';
@@ -25,7 +25,7 @@ export function analysisReport(entries:ReportEntry[],note=''){
       <p>R²（扣背景信号） ${number(r.statistics.r_squared)}；RMSE ${number(r.statistics.rmse)}。${'analysis_mode' in c&&c.analysis_mode==='xrd'?'XRD 为观测峰宽，未扣除仪器展宽。':''}</p>
       <ul>${d.warnings.map(w=>`<li>${e(w)}</li>`).join('')}</ul>${chart(s)}
       <div class="table-scroll" role="region" aria-label="峰性质表格" tabindex="0"><table><thead><tr><th>峰 ID / 标签</th><th>模型</th><th>峰顶 / ${e(snapshotUnit(s))}</th><th>FWHM / ${e(snapshotUnit(s))}</th><th>区间面积</th><th>全域面积</th><th>半高区点数 / 间隔中位数</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="small">面积单位 Y × ${e(snapshotUnit(s))}；全域面积含区间外模型外推。面积占比非原子百分比。标准误是当前模型条件下的参数不确定度，派生性质不提供标准误。收敛不等于模型适用。</p>
+      <p class="small">面积单位 ${e(snapshotUnits(s).y)} × ${e(snapshotUnit(s))}；全域面积含区间外模型外推。面积占比非原子百分比。标准误是当前模型条件下的参数不确定度，Gaussian 和 Lorentz 净峰高可在协方差可用时估计标准误。收敛不等于模型适用。</p>
       <h3>配置与约束记录</h3><pre>${e(JSON.stringify({components:c.components,constraints:c.constraints,background,solver:c.solver,single_solver_settings:s.singleSettings},null,2))}</pre>
       <h3>软件数值与诊断记录</h3><pre>${e(JSON.stringify({statistics:r.statistics,parameters:'parameters' in r?r.parameters:r.components.map(p=>({id:p.id,parameters:p.parameters})),warnings:d.warnings},null,2))}</pre><p>${e(item.note)}</p></section>`;
   }).join('');

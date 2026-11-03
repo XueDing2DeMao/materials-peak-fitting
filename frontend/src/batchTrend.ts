@@ -1,10 +1,17 @@
 import type { BatchRow } from './batchTypes';
 import { resultDiagnostics } from './resultDiagnostics';
+import { isMulti } from './fitAdapter';
+import { spectrumUnits, quantityUnit } from './spectrumUnits';
 /** 前端实验记录；与求解参数分开，不改变计算。 */
 export interface ExperimentMetadata { sample_id:string;condition_name:string;condition_value:number|null;condition_unit:string;replicate_id:string }
 export type MetadataByTask=Record<string,ExperimentMetadata>;
 export const emptyMetadata=():ExperimentMetadata=>({sample_id:'',condition_name:'',condition_value:null,condition_unit:'',replicate_id:''});
 export type TrendMetric='position'|'fwhm'|'area_window'|'area_total';
+export function trendUnit(row:BatchRow,metric:TrendMetric,fallback:string){
+  const request=row.request;
+  const units='source' in request?spectrumUnits(isMulti(request)?request.analysis_mode:'xps',request.source):{x:fallback,y:'Y'};
+  return quantityUnit(metric,units);
+}
 /** 近常数序列留出可读坐标范围，避免将浮点尾差放大成实验趋势。 */
 export function constantTrendRange(values:(number|null)[]):[number,number]|undefined{
   const finite=values.filter((v):v is number=>v!==null&&Number.isFinite(v));

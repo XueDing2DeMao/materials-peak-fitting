@@ -5,7 +5,7 @@ import { PARAMETER_LABELS, peakModelInfo, type PeakParameterName } from '../peak
 import type { MultiComponent, MultiConstraint } from '../multipeakTypes';
 import type { XpsParameter } from '../xpsTypes';
 
-const props = defineProps<{ component: MultiComponent; constraints: MultiConstraint[]; unit: string; reversed?: boolean; dataVersion?:unknown }>();
+const props = defineProps<{ component: MultiComponent; constraints: MultiConstraint[]; unit: string; reversed?: boolean; dataVersion?:unknown; compact?:boolean; busy?:boolean }>();
 const emit=defineEmits<{restored:[];select:[]}>();
 let snapshot:ReturnType<typeof memorySnapshot<{component:MultiComponent;constraints:MultiConstraint[]}>>|null=null;
 const canUndo=ref(false);
@@ -14,7 +14,7 @@ watch(()=>props.dataVersion,()=>{snapshot=null;canUndo.value=false;leave();});
 const dialog = ref<HTMLDialogElement | null>(null);
 const editorButton = ref<HTMLButtonElement | null>(null);
 const isOpen = ref(false);
-let restoreFocus = true;
+let focusAfterClose: HTMLButtonElement | null = null;
 const fields = computed(() => Object.entries(props.component.parameters).filter((entry): entry is [PeakParameterName, XpsParameter] => Boolean(entry[1])));
 function linked(name: PeakParameterName) { return props.constraints.find(c => c.target.component === props.component.id && c.target.parameter === name); }
 function label(name: PeakParameterName) { return PARAMETER_LABELS[name] + (name === 'mu' ? '' : name === 'A' ? ` / Y × ${props.unit}` : ` / ${props.unit}`); }
@@ -23,20 +23,47 @@ function bound(event: Event, parameter: XpsParameter, name: 'lower' | 'upper') {
   const value = (event.target as HTMLInputElement).value;
   parameter[name] = value === '' ? null : Number(value);
 }
-function open() { emit('select');snapshot=memorySnapshot({component:props.component,constraints:props.constraints},props.dataVersion);canUndo.value=true;restoreFocus = true; dialog.value?.showModal(); isOpen.value = true; }
+function open(trigger?: HTMLButtonElement | null) {
+  if (props.busy || !dialog.value) return false;
+  focusAfterClose = trigger ?? editorButton.value;
+  emit('select');
+  snapshot = memorySnapshot({component:props.component,constraints:props.constraints},props.dataVersion);
+  canUndo.value = true;
+  dialog.value.showModal();
+  isOpen.value = true;
+  return true;
+}
 function close() { dialog.value?.close(); }
-function closed() { isOpen.value = false; if (restoreFocus) editorButton.value?.focus(); }
-function leave() { restoreFocus = false; if (dialog.value?.open) close(); }
+function closed() {
+  isOpen.value = false;
+  focusAfterClose?.focus({preventScroll:true});
+  focusAfterClose = null;
+}
+function leave() { focusAfterClose = null; if (dialog.value?.open) close(); }
 onDeactivated(leave);
 onBeforeUnmount(leave);
-async function focusParameter(name:string){open();await nextTick();const inputs=Array.from(dialog.value?.querySelectorAll<HTMLInputElement>('input')??[]);const input=inputs.find(input=>!input.disabled&&input.getAttribute('aria-label')===`${props.component.id} ${name} 初值`)??inputs.find(input=>!input.disabled&&input.getAttribute('aria-label')===`${props.component.id} ${name} 下限`);input?.focus();input?.select();}
+async function focusParameter(name:string, trigger?: HTMLButtonElement | null) {
+  if (!open(trigger)) return;
+  await nextTick();
+  const inputs = Array.from(dialog.value?.querySelectorAll<HTMLInputElement>('input') ?? []);
+  const accessibleName = `${props.component.id} ${name}`;
+  const input = inputs.find(el => !el.disabled && el.getAttribute('aria-label') === accessibleName + ' 初值')
+    ?? inputs.find(el => !el.disabled && el.getAttribute('aria-label') === accessibleName + ' 下限');
+  input?.focus();
+  input?.select();
+}
 defineExpose({focusParameter});
 </script>
 
 <template>
-  <section class="parameter-overview peak-parameter-overview" :aria-label="`${component.id} 参数摘要`">
+  <section class="parameter-overview peak-parameter-overview" :class="{'is-compact':compact}" :aria-label="`${component.id} 参数摘要`">
     <dl v-if="component.parameters.xc"><div><dt :title="label('xc')">峰位</dt><dd>{{ format(component.parameters.xc.value) }}<small v-if="component.parameters.xc.fixed">固定</small><small v-else-if="linked('xc')">绑定</small></dd></div></dl>
-    <button ref="editorButton" type="button" aria-haspopup="dialog" :aria-expanded="isOpen" :aria-label="`编辑 ${component.id} 参数与约束`" @click="open">参数</button>
+    <button ref="editorButton" :disabled="busy" type="button" aria-haspopup="dialog" :aria-expanded="isOpen" :aria-label="`编辑 ${component.id} 参数与约束`" @click="open()">
+      <svg v-if="compact" aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <circle cx="3" cy="8" r="1.3" /><circle cx="8" cy="8" r="1.3" /><circle cx="13" cy="8" r="1.3" />
+      </svg>
+      <span v-else>参数</span>
+    </button>
   </section>
   <dialog ref="dialog" class="parameter-dialog peak-parameter-dialog" :aria-label="`${component.id} · ${component.label} 参数初值与约束`" @close="closed">
     <header class="parameter-dialog-header"><div><h2>{{ component.id }} · {{ component.label }}</h2><p class="hint">{{ peakModelInfo(component.model)?.label }} · 参数初值与约束</p></div><button type="button" aria-label="关闭参数编辑" @click="close">关闭</button></header>
@@ -66,18 +93,24 @@ defineExpose({focusParameter});
 .peak-parameter-overview dt { font-weight: 400; color: var(--ui-text-muted); }
 .peak-parameter-overview dd small { margin-left: 4px; }
 .peak-parameter-overview>button { width: auto; flex-shrink: 0; height: var(--ui-control-height-compact); padding-inline: 10px; }
+.peak-parameter-overview.is-compact { gap: 4px; }
+.peak-parameter-overview.is-compact dt { display: none; }
+.peak-parameter-overview.is-compact dd { text-align: right; }
+.peak-parameter-overview.is-compact>button { width: 28px; height: 28px; min-height: 28px; padding: 0; border-color: transparent; background: transparent; font-size: 18px; }
+.peak-parameter-overview.is-compact dl { font-size: 12px; }
+.peak-parameter-overview.is-compact dd small { display: block; margin: 0; font-size: 10px; }
 .peak-parameter-help { margin-bottom: var(--ui-space-4); }
 .peak-parameter-link { grid-column: 1 / -1; color: var(--ui-text-muted); overflow-wrap: anywhere; }
 .parameter-dialog-header h2 { overflow-wrap: anywhere; }
-.peak-parameter-dialog .parameter-dialog-header, .peak-parameter-dialog .parameter-dialog-footer { padding: 12px 20px; }
-.peak-parameter-dialog .parameter-dialog-body { padding: 12px 20px; }
+.peak-parameter-dialog .parameter-dialog-header, .peak-parameter-dialog .parameter-dialog-footer { padding: var(--ui-space-4) var(--ui-space-6); }
+.peak-parameter-dialog .parameter-dialog-body { padding: var(--ui-space-4) var(--ui-space-6); }
 .peak-parameter-dialog .parameter-dialog-body>p { margin-bottom: 8px; }
 .peak-parameter-help { margin-bottom: 8px; }
 .peak-identity { margin-bottom: 8px; }
 .peak-identity :deep(label) { margin: 0; }
 .peak-parameter-dialog .parameter-row { padding-block: 8px; gap: 8px; }
-.peak-parameter-dialog .parameter-row input:not([type=checkbox]) { height: 34px; }
+.peak-parameter-dialog .parameter-row input:not([type=checkbox]) { height: var(--ui-control-height); }
 @media (min-width: 601px) {
-  .peak-parameter-dialog .parameter-row { grid-template-columns: minmax(120px,1fr) repeat(3,minmax(0,1fr)) 48px; grid-template-areas: "name value lower upper fixed"; }
+  .peak-parameter-dialog .parameter-row { grid-template-columns: minmax(120px,1fr) repeat(3,minmax(0,1fr)) 64px; grid-template-areas: "name value lower upper fixed"; }
 }
 </style>

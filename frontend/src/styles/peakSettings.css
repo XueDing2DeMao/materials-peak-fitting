@@ -1,0 +1,18 @@
+/* 峰设置中的高级表单沿用参数初值的双列宽度。 */
+.peak-options > :not(summary), .peak-single-tools > * {
+  min-width: 0;
+  margin: var(--ui-space-2) 0 0;
+}
+.peak-options > button, .peak-single-tools > button { width: 100%; }
+.peak-options > label:not(.xps-check), .peak-options .xps-group label {
+  gap: var(--ui-space-1);
+  margin-block: var(--ui-space-2) 0;
+}
+.peak-options .xps-group { padding: 0; border: 0; }
+.peak-options .xps-relation {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: var(--ui-space-1) var(--ui-space-2);
+}
+.peak-options .xps-relation > span { grid-column: 1 / -1; }
+.peak-options .xps-relation :is(input,button) { min-width: 0; width: 100%; }
+.peak-options .xps-relation > button { align-self: stretch; height: auto; min-height: 0; padding-block: 0; }

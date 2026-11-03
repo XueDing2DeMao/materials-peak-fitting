@@ -36,6 +36,10 @@ class PeakRecordTests(unittest.TestCase):
         self.assertIsNone(p['fields']['width']['standard_error'])
         self.assertEqual(a['spectra'][0]['metrics']['rmse']['value'], 2)
         self.assertEqual(p['fields']['position']['standard_error'], .01)
+        self.assertIsNone(p['fields']['height']['standard_error'])
+        result['peak_geometry']['peak_height_uncertainty']={'standard_error':.2,'confidence_interval':[11.6,12.4],'reason':None}
+        updated=self.m.adapt_internal_result('single', result, mode='xrd')['records'][0]
+        self.assertEqual(updated['fields']['height']['standard_error'],.2)
         json.dumps(a, allow_nan=False)
 
     def test_internal_multi_preserves_source_and_bad_fit_warning(self):

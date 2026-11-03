@@ -13,6 +13,16 @@ const wrappers:Array<{unmount:()=>void}>=[];
 afterEach(()=>{wrappers.splice(0).forEach(w=>w.unmount());vi.clearAllMocks();});
 function workbench(){const w=mount(MultiPeakWorkbench,{props:{x:[0,1,2,3,4],y:[0,1,5,1,0],source:null,mode:'general'}});wrappers.push(w);return w;}
 describe('单谱多峰工作区',()=>{
+  it('从已选谱列读取单位并在图轴和区间设置中使用',async()=>{
+    const w=workbench();
+    await w.setProps({source:{filename:'raman.csv',file_sha256:'',sheet:'数据',x_column:'位移 [cm⁻¹]',y_column:'强度 [counts/s]'}});
+    await flushPromises();
+    const plot=w.get('[data-test="multi-plot"]').element;
+    const call=vi.mocked(Plotly.react).mock.calls.filter((args:unknown[])=>args[0]===plot).at(-1)!;
+    expect(call[2].xaxis.title.text).toContain('cm⁻¹');
+    expect(call[2].yaxis.title.text).toContain('counts/s');
+    expect(w.get('[data-test="multi-range-start"]').element.closest('label')?.textContent).toContain('cm⁻¹');
+  });
   it('一次开启后连续左键添加，右键删除附近峰，手动取消后停止编辑',async()=>{
     const w=workbench();await w.get('[data-test="multi-baseline"]').setValue('none');
     const plot=w.get('[data-test="multi-plot"]').element as HTMLElement & {_fullLayout:unknown};

@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { spectrumUnits } from "../spectrumUnits";
 import WorkbenchLayoutTools from './WorkbenchLayoutTools.vue';
+import WorkbenchMenu from './WorkbenchMenu.vue';
 import WorkbenchSplitHandle from './WorkbenchSplitHandle.vue';
 import {useWorkbenchLayout} from '../useWorkbenchLayout';
 import WorkbenchViewNav from "./WorkbenchViewNav.vue";
@@ -23,6 +25,7 @@ const scenarioBusy=ref(false);
 const analysisSnapshot=computed<AnalysisSnapshot|null>(()=>result.value?.configuration?{engine:'xps',configuration:result.value.configuration,result:result.value,stale:stale.value}:null);
 const scenarioKey=computed(()=>JSON.stringify(config.value));
 const props=defineProps<{x:number[];y:number[];source:XpsSource|null}>();
+const units=computed(()=>spectrumUnits('xps',props.source));
 const emit=defineEmits<{work:[dirty:boolean];template:[config:XpsRequest]}>();
 const config=ref(createConfig(props.x,props.y,props.source)),preview=ref<XpsPreview|null>(null),result=ref<XpsResult|null>(null),candidates=ref<Candidate[]>([]);
 const busy=ref(false),error=ref(""),stale=ref(false),notice=ref("");
@@ -32,14 +35,15 @@ const selectedPeak=ref(''),resultSection=ref<HTMLElement|null>(null);
 const resultViews=ref<{showResults:()=>void;showDiagnostics:()=>void;showArchive:()=>void}|null>(null);
 const activePane=ref<'chart'|'settings'|'results'>('chart');
 const resultsOpen=ref(false),resultTrigger=ref<HTMLButtonElement|null>(null);
-const {grid,stacked,chartExpanded,settingsWidth,resultWidth,settingsMax,resultMax,layoutStyle,setWidth,resetWidths}=useWorkbenchLayout(resultsOpen);
+watch(result,value=>{if(value){resultsOpen.value=true;chartExpanded.value=false;resultViews.value?.showResults();}});
+const {grid,stacked,chartExpanded,settingsWidth,resultHeight,settingsMax,resultMax,layoutStyle,setSize,resetSizes}=useWorkbenchLayout(resultsOpen);
 async function toggleChart(){chartExpanded.value=!chartExpanded.value;if(chartExpanded.value)activePane.value='chart';await nextTick();(chartExpanded.value?document.getElementById('analysis-plot'):grid.value?.closest('.single-workbench')?.querySelector<HTMLElement>('[data-test="expand-chart"]'))?.focus({preventScroll:true});}
 function handleChartEscape(event:KeyboardEvent){if(chartExpanded.value&&!(event.target as HTMLElement)?.closest('dialog'))void toggleChart();}
 async function viewResults(){chartExpanded.value=false;activePane.value='results';resultsOpen.value=true;await nextTick();resultSection.value?.focus({preventScroll:true});}
 function handleResultsEscape(event:KeyboardEvent){if((event.target as HTMLElement)?.closest('dialog'))return;void closeResults();}
 async function closeResults(){resultsOpen.value=false;activePane.value='chart';await nextTick();(resultTrigger.value?.getClientRects().length?resultTrigger.value:document.getElementById('analysis-plot'))?.focus({preventScroll:true});}
 function locatePeak(id:string,parameter:string){if(stale.value||busy.value||scenarioBusy.value)return;void selectPeak(id,parameter);}
-async function selectPeak(id:string,parameter?:string){if(!config.value.components.some(c=>c.id===id))return;if(!parameter&&selectedPeak.value===id&&activePane.value==='settings'&&!resultsOpen.value)return;chartExpanded.value=false;activePane.value='settings';resultsOpen.value=false;selectedPeak.value=id;await nextTick();void controls.value?.selectPeak(id,parameter);}
+async function selectPeak(id:string,parameter?:string){if(!config.value.components.some(c=>c.id===id))return;if(!parameter&&selectedPeak.value===id&&activePane.value==='settings')return;chartExpanded.value=false;activePane.value='settings';if(parameter)resultsOpen.value=false;selectedPeak.value=id;await nextTick();void controls.value?.selectPeak(id,parameter);}
 async function navigateView(view:'chart'|'settings'|'results'){
  chartExpanded.value=false;
  if(view==='results'){await viewResults();return;}
@@ -134,16 +138,32 @@ defineExpose({sessionState,restoreSession,materialResultHint:()=>!result.value?'
 </script>
 <template><section class="xps-workbench single-workbench" :class="{'results-open':resultsOpen,'layout-stacked':stacked,'chart-expanded':chartExpanded}" :style="layoutStyle" @keydown.esc="handleChartEscape" :data-active-pane="activePane">
 
-  <header class="single-workflow-toolbar"><WorkbenchLayoutTools :expanded="chartExpanded" :settings-width="settingsWidth" :result-width="resultWidth" :settings-max="settingsMax" :result-max="resultMax" :results-open="resultsOpen" :stacked="stacked" @toggle="toggleChart" @resize="setWidth" @reset="resetWidths" /><span v-if="busy||stale" class="single-workflow-status" role="status">{{busy?'计算中':stale?'参数已变更 · 需要重新拟合':''}}</span><div class="single-workflow-actions"><button ref="resultTrigger" class="single-results-toggle" type="button" :aria-expanded="resultsOpen&&!chartExpanded" aria-controls="analysis-results" data-test="toggle-results" @click="resultsOpen&&!chartExpanded?closeResults():viewResults()">{{resultsOpen&&!chartExpanded?'收起结果':'结果与诊断'}}</button><button :disabled="busy||!source" @click="fileInput?.click()">复用拟合设置</button><button :disabled="!result||stale||!result.converged||busy" @click="template" data-test="multi-template">用于批量拟合</button></div></header>
+  <header class="single-workflow-toolbar">
+    <WorkbenchLayoutTools :expanded="chartExpanded" :settings-width="settingsWidth" :result-height="resultHeight"
+      :settings-max="settingsMax" :result-max="resultMax" :results-open="resultsOpen" :stacked="stacked"
+      @toggle="toggleChart" @resize="setSize" @reset="resetSizes" />
+    <span v-if="busy||stale" class="single-workflow-status" role="status">{{busy?'计算中':'参数已变更 · 需要重新拟合'}}</span>
+    <div class="single-workflow-actions">
+      <button v-show="!resultsOpen||chartExpanded" ref="resultTrigger" class="workbench-command single-results-toggle"
+        type="button" :aria-expanded="resultsOpen&&!chartExpanded" aria-controls="analysis-results"
+        data-test="toggle-results" @click="viewResults">结果与诊断</button>
+      <WorkbenchMenu label="拟合配置" align-end close-on-action>
+        <div class="single-config-actions">
+          <button type="button" :disabled="busy||!source" @click="fileInput?.click()">复用拟合设置</button>
+          <button type="button" :disabled="!result||stale||!result.converged||busy" data-test="multi-template" @click="template">用于批量拟合</button>
+        </div>
+      </WorkbenchMenu>
+    </div>
+  </header>
   <p v-if="error" class="error xps-message" role="alert">{{error}}</p><p v-if="notice" class="hint xps-message" role="status">{{notice}}</p>
   <label v-if="restoredReview&&config.background.kind!=='shirley'" class="xps-check confirmation-callout"><input v-model="config.background.confirmed" type="checkbox" :disabled="!preview||busy" />恢复后已重新预览并复核当前背景</label>
   <div v-if="deletion.canUndo.value" class="undo-peak-message" role="status"><span>继续编辑前可撤销最近删除的峰。</span><button type="button" data-test="undo-delete-peak" :disabled="busy||scenarioBusy" @click="undoDelete">撤销删除峰</button></div>
   <WorkbenchViewNav :active="activePane" @navigate="navigateView" /><div ref="grid" class="xps-grid"><aside id="analysis-settings" tabindex="-1" class="xps-control-column"><div class="configuration-actions"><input ref="fileInput" type="file" accept=".json,application/json" hidden @change="load" /></div><XpsFitControls ref="controls" :selected-peak="selectedPeak" :has-result="Boolean(result)" @remove="removeAt" @select="selectPeak" :config="config" :previewed="Boolean(preview)" :background-preview="preview" :busy="busy||scenarioBusy" :candidates="candidates" @preview="action('preview')" @fit="action('fit')" @candidates="action('candidates')" @error="error=$event" @calibrate="calibrate" /></aside>
-    <WorkbenchSplitHandle label="调整设置栏宽度" controls="analysis-settings" side="settings" :value="settingsWidth" :min="232" :max="settingsMax" @resize="setWidth('settings',$event)" />
-    <XpsChart :read-only="busy||scenarioBusy" id="analysis-plot" tabindex="-1" :selected-peak="selectedPeak" @select="selectPeak" ref="chart" :components="config.components" :x="x" :y="y" :shift="config.shift_eV" :start="Number(config.range_start)" :end="Number(config.range_end)" :preview="preview" :result="stale?null:result" @range-endpoint-focus="focusRangeEndpoint" @add-peak="addAt" @remove-peak="removeAt" @range="range" />
-    <WorkbenchSplitHandle v-show="resultsOpen" label="调整结果栏宽度" controls="analysis-results" side="results" :value="resultWidth" :min="288" :max="resultMax" @resize="setWidth('results',$event)" />
-    <aside id="analysis-results" ref="resultSection" tabindex="-1" aria-label="拟合结果" class="xps-result-column" @keydown.esc.stop="handleResultsEscape"><button class="single-results-close" type="button" @click="closeResults">关闭结果面板</button><ResultWorkspace workstation ref="resultViews"><XpsResults locatable @navigate="navigateReview" @locate="locatePeak" :selected-peak="selectedPeak" @select="selectedPeak=$event" :result="result" :stale="stale" :busy="busy||scenarioBusy" @export="download" @image="chart?.downloadImage()" />
-  <template #archive><div class="analysis-archive"><div class="archive-heading"><h2>比较与归档</h2><span>复核后记录分析依据</span></div>
+    <WorkbenchSplitHandle label="调整设置栏宽度" controls="analysis-settings" side="settings" :value="settingsWidth" :min="232" :max="settingsMax" @resize="setSize('settings',$event)" />
+    <XpsChart :units="units" :read-only="busy||scenarioBusy" id="analysis-plot" tabindex="-1" :selected-peak="selectedPeak" @select="selectPeak" ref="chart" :components="config.components" :x="x" :y="y" :shift="config.shift_eV" :start="Number(config.range_start)" :end="Number(config.range_end)" :preview="preview" :result="stale?null:result" @range-endpoint-focus="focusRangeEndpoint" @add-peak="addAt" @remove-peak="removeAt" @range="range" />
+    <WorkbenchSplitHandle v-show="resultsOpen" label="调整结果区高度" controls="analysis-results" side="results" orientation="horizontal" :value="resultHeight" :min="160" :max="resultMax" @resize="setSize('results',$event)" />
+    <aside id="analysis-results" ref="resultSection" tabindex="-1" aria-label="拟合结果" class="xps-result-column" @keydown.esc.stop="handleResultsEscape"><ResultWorkspace workstation ref="resultViews"><template #tools><button class="single-results-close" type="button" @click="closeResults">收起结果</button></template><XpsResults :y-unit="units.y" locatable @navigate="navigateReview" @locate="locatePeak" :selected-peak="selectedPeak" @select="selectedPeak=$event" :result="result" :stale="stale" :busy="busy||scenarioBusy" @export="download" @image="chart?.downloadImage()" />
+  <template #archive><div class="analysis-archive">
   <FitScenarioComparison :snapshot="analysisSnapshot" :current-key="scenarioKey" :busy="busy" @activity="scenarioBusy=$event" />
   <AnalysisReportActions :entries="analysisSnapshot?[{label:source?.filename??'当前 XPS 谱线',snapshot:analysisSnapshot,status:stale?'已过期':'已计算'}]:[]" :disabled="busy||scenarioBusy" />
   </div></template></ResultWorkspace></aside></div>

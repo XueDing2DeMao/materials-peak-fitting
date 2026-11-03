@@ -34,6 +34,14 @@ it('拟合区间的强度轴不被区间外的高峰压缩',async()=>{
   await w.get('[data-test="batch-chart-full"]').trigger('click');await flushPromises();
   expect((vi.mocked(Plotly.react).mock.calls.at(-1)![2] as any).yaxis.range[1]).toBeGreaterThan(100000);
 });
+it('图轴和导出 PNG 共用原谱列单位',async()=>{
+  const w=await chart();
+  await w.setProps({request:{...w.props('request'),source:{filename:'s.csv',file_sha256:'a',sheet:'data',x_column:'Wavenumber [cm^-1]',y_column:'Intensity (counts)'}}});await flushPromises();
+  const layout=vi.mocked(Plotly.react).mock.calls.at(-1)![2] as any;
+  expect(layout.xaxis.title.text).toContain('cm^-1');expect(layout.yaxis.title.text).toContain('counts');
+  await w.findAll('button').find(b=>b.text()==='谱图 PNG')!.trigger('click');
+  expect(Plotly.downloadImage).toHaveBeenCalledWith(w.get('[data-test="batch-plot"]').element,expect.objectContaining({format:'png'}));
+});
 it('XPS 原谱使用校准后倒序坐标，残差与主图共享轴，选峰突出对应曲线',async()=>{
   const w=await chart(true);
   await w.setProps({result:{x:[1,2,3],total_y:[1,3,1],residuals:[0,1,0],components:[{id:'p1',label:'峰1',y:[0,2,0]},{id:'p2',label:'峰2',y:[0,1,0]}]} as any,selectedPeak:'p1'});await flushPromises();

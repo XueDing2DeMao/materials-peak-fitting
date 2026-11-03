@@ -1,0 +1,123 @@
+/* 批量工作台沿用单谱的工具栏、列表与底部结果面板层级。 */
+.batch-workbench > .batch-header {
+  padding: 10px 16px 8px;
+  box-shadow: none;
+}
+.batch-header > .batch-toolbar > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.batch-header h2 { font-size: 16px; }
+.batch-header .batch-toolbar p { margin: 0; }
+.batch-header .xps-actions { margin: 0; gap: 8px; }
+.batch-header button { height: 32px; font-size: 13px; }
+.batch-workbench .batch-header .batch-flow {
+  display: flex;
+  gap: 20px;
+  margin: 8px 0 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+.batch-workbench .batch-header .batch-flow button {
+  flex: 0 1 auto;
+  min-height: 38px;
+  height: auto;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.batch-workbench .batch-header .batch-flow button[aria-selected=true] {
+  color: var(--ui-primary);
+  box-shadow: inset 0 -2px var(--ui-primary);
+}
+.batch-workbench .batch-header .batch-flow .batch-step-number { display: none; }
+.batch-flow-label { display: flex; align-items: baseline; gap: 8px; }
+.batch-workbench .batch-header .batch-flow small { display: none; }
+.batch-workbench .batch-progress {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  background: var(--ui-subtle);
+  font-size: 12px;
+}
+.batch-run-help { margin-top: 4px; font-size: 12px; }
+.batch-run-help summary { color: var(--ui-text-muted); }
+.batch-run-help p { margin: 6px 0; }
+.batch-sidebar-heading { display: flex; align-items: center; justify-content: space-between; }
+.batch-workbench .batch-row { border-radius: 0; padding: 0; margin: 0; }
+.batch-workbench .batch-selected { border-color: transparent; border-bottom-color: var(--ui-border); box-shadow: inset 3px 0 var(--ui-primary); }
+.batch-workbench .batch-row-select { padding: 8px 10px; }
+.batch-sheet { display: block; margin-top: 2px; color: var(--ui-text-muted); font-size: 12px; font-weight: 400; }
+.batch-row-name, .batch-row-column { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-workbench .batch-row-column { margin: 2px 0; }
+.batch-result-resize { height: 28px; font-size: 12px; border-color: transparent; background: transparent; }
+.batch-workbench .batch-detail-tabs :deep(.result-view-tabs) { padding: 4px 12px; background: var(--ui-surface); }
+.batch-workbench .batch-detail-tabs :deep(.result-view-tabs button) { border: 0; border-radius: 0; height: 34px; }
+.batch-workbench .batch-detail-tabs :deep(.result-view-tabs button[aria-selected=true]) { box-shadow: inset 0 -2px var(--ui-primary); }
+.batch-workbench .batch-detail-tabs :deep(.compact-fit-results),
+.batch-workbench .batch-detail-tabs :deep(.results-panel) { padding: 10px 14px; }
+.batch-workbench .batch-detail-tabs :deep(.analysis-archive) { padding: 12px 14px; }
+
+@media (min-width: 901px) {
+  .batch-workbench.is-results-workbench {
+    height: max(660px, calc(100dvh - 110px));
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+  }
+  .is-results-workbench > .batch-header { flex: none; }
+  .is-results-workbench > [data-test=batch-review-stage] { flex: 1; min-height: 0; }
+  .is-results-workbench .batch-results-layout {
+    height: 100%;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 10px;
+    align-items: stretch;
+  }
+  .is-results-workbench .batch-sidebar { position: static; min-height: 0; max-height: none; padding: 12px; }
+  .is-results-workbench .batch-sidebar label { font-size: 12px; margin: 6px 0; }
+  .is-results-workbench .batch-list { flex: 1; min-height: 0; }
+  .is-results-workbench .batch-detail { display: flex; flex-direction: column; min-height: 0; gap: 6px; }
+  .is-results-workbench .batch-detail-heading { flex: none; padding: 8px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; }
+  .is-results-workbench .batch-detail-heading > .batch-toolbar { min-width: 0; }
+  .is-results-workbench .batch-detail-heading > .xps-actions { grid-column: 2; grid-row: 1; }
+  .is-results-workbench .batch-detail-heading > :not(.batch-toolbar):not(.xps-actions) { grid-column: 1 / -1; }
+  .is-results-workbench .batch-detail-heading > .xps-actions ~ .xps-actions { grid-row: auto; grid-column: 1 / -1; }
+  .is-results-workbench .batch-detail-heading h3 { font-size: 14px; }
+  .is-results-workbench .batch-detail-heading > .hint { margin: 2px 0; font-size: 12px; }
+  .is-results-workbench .batch-detail-heading .xps-actions { margin: 6px 0; gap: 6px; }
+  .is-results-workbench .batch-detail-heading button { height: 30px; font-size: 12px; padding-inline: 8px; }
+  .is-results-workbench .batch-metrics { margin: 4px 0; font-size: 12px; }
+  .is-results-workbench .batch-warning { margin: 6px 0; padding: 6px 10px; font-size: 12px; max-height: 100px; overflow: auto; }
+  .is-results-workbench :deep(.batch-chart-fill) { flex: 1; min-height: 280px; padding: 8px 12px; }
+  .is-results-workbench .batch-detail > :deep(.dataset-audit) { flex: none; font-size: 12px; }
+  .is-results-workbench .batch-detail-tabs { flex: 0 0 220px; min-height: 0; display: flex; flex-direction: column; }
+  .is-results-workbench.results-expanded .batch-detail { overflow-y: auto; }
+  .is-results-workbench.results-expanded .batch-detail-tabs { flex-basis: 320px; }
+  .is-results-workbench .batch-detail-tabs :deep(.result-view-tabs) { flex: none; }
+  .is-results-workbench .batch-detail-tabs :deep([role=tabpanel]) { flex: 1; min-height: 0; overflow: auto; }
+}
+@media (max-width: 1100px) {
+  .batch-workbench .batch-header .batch-flow { gap: 12px; }
+  .batch-workbench .batch-header .batch-flow small { display: none; }
+  .is-results-workbench .batch-detail-heading { display: block; }
+}
+@media (max-width: 700px) {
+  .batch-header > .batch-toolbar > div:first-child { flex-wrap: wrap; gap: 4px; }
+  .batch-workbench .batch-header .batch-flow { gap: 4px; flex-wrap: wrap; }
+  .batch-workbench .batch-header .batch-flow button { min-height: 44px; padding-inline: 6px; }
+  .batch-workbench .batch-header .batch-flow button:last-child { grid-column: auto; }
+  .batch-result-resize { display: none; }
+}
+
+.is-results-workbench .batch-detail > :deep(.dataset-audit) { margin: 0; padding: 0 12px; min-height: 24px; }
+.is-results-workbench .batch-detail > :deep(.dataset-audit > p) { margin: 0; }
+.is-results-workbench .batch-detail > :deep(.dataset-audit > details:not([open])) { line-height: 24px; }
+.is-results-workbench .batch-detail > :deep(.dataset-audit > details > summary) { padding: 0; min-height: 24px; }
+.batch-detail-tabs[data-result-view=results] :deep(.compact-result-heading),
+.batch-detail-tabs[data-result-view=results] :deep(.results-heading),
+.batch-detail-tabs[data-result-view=results] :deep(.result-diagnostic-state),
+.batch-detail-tabs[data-result-view=results] :deep(.result-quality-note) { display: none; }
+.batch-detail-tabs :deep(.compact-result-summary) { font-size: 12px; gap: 8px 20px; }
+.batch-workbench .batch-header .batch-menu summary{padding:4px 8px;min-height:32px}

@@ -34,8 +34,9 @@ export function analyzePeak(payload: FitRequest): Promise<AutoPeakAnalysis> {
 export function compareModels(payload: FitRequest, includeAsymmetric=false): Promise<ModelComparison> {
   return request("/api/model-comparison", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({...payload,include_asymmetric:includeAsymmetric}) });
 }
-export async function downloadExport(kind: "curves" | "parameters", result: FitResult): Promise<Blob> {
-  const response = await fetch(`${baseUrl}/api/export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, result }) });
+export async function downloadExport(kind: "curves" | "parameters", result: FitResult, units?:{x:string;y:string}): Promise<Blob> {
+  const snapshot=units?{...result,analysis_metadata:{...result.analysis_metadata,x_unit:units.x,y_unit:units.y}}:result;
+  const response = await fetch(`${baseUrl}/api/export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, result:snapshot }) });
   if (!response.ok) throw new Error("导出失败");
   return response.blob();
 }

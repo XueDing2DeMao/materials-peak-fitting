@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Plotly from 'plotly.js-dist-min';
 import { isMulti } from '../fitAdapter';
+import { spectrumUnits } from '../spectrumUnits';
 import { componentLine, figureAxis, figureLayout, FIGURE_COLORS } from '../figureStyle';
 import { PLOTLY_CHINESE_CONFIG } from '../plotlyLocale';
 import type { BatchRequest, BatchResult } from '../batchTypes';
@@ -13,7 +14,8 @@ const plot=ref<HTMLElement|null>(null),full=ref(false),expanded=ref(false),error
 const container=ref<HTMLElement|null>(null),resetVersion=ref(0);
 const chartHeight=computed(()=>expanded.value?760:props.result?490:350);
 const xps=computed(()=>!isMulti(props.request));
-const xLabel=computed(()=>xps.value?'结合能 / eV':isMulti(props.request)&&props.request.analysis_mode==='xrd'?'2θ / °':'X（原数据单位）');
+const units=computed(()=>spectrumUnits(isMulti(props.request)?props.request.analysis_mode:'xps',props.request.source));
+const xLabel=computed(()=>xps.value?'结合能 / eV':isMulti(props.request)&&props.request.analysis_mode==='xrd'?'2θ / °':`X / ${units.value.x}`);
 const shifted=computed(()=>props.request.x.map(x=>x+(isMulti(props.request)?0:props.request.shift_eV)));
 let observer:ResizeObserver|undefined,disposed=false,drawing=false,redraw=false;
 
@@ -62,10 +64,10 @@ async function draw(){
       margin:{l:narrow?64:78,r:20,t:props.fill?48:narrow?115:70,b:55},dragmode:'pan',
       uirevision:`${full.value}:${request.range_start}:${request.range_end}:${Boolean(result)}:${resetVersion.value}`,
       xaxis:{...figureAxis(result?'':xLabel.value),range,autorange:false,anchor:'y',showticklabels:!result},
-      yaxis:{...figureAxis('强度（原数据单位）'),domain:result?[.3,1]:[0,1],range:yRange,autorange:!yRange},
+      yaxis:{...figureAxis(`强度 / ${units.value.y}`),domain:result?[.3,1]:[0,1],range:yRange,autorange:!yRange},
       ...(result?{
         xaxis2:{...figureAxis(xLabel.value),range,autorange:false,anchor:'y2',matches:'x'},
-        yaxis2:{...figureAxis('残差'),domain:[0,.17],anchor:'x2',nticks:3},
+        yaxis2:{...figureAxis(`残差 / ${units.value.y}`),domain:[0,.17],anchor:'x2',nticks:3},
         shapes:[{type:'line',xref:'paper',yref:'y2',x0:0,x1:1,y0:0,y1:0,line:{color:FIGURE_COLORS.reference,width:1,dash:'dash'}}],
       }:{}),
     },{...PLOTLY_CHINESE_CONFIG,displaylogo:false,modeBarButtonsToRemove:['select2d','lasso2d']});
@@ -106,9 +108,9 @@ onBeforeUnmount(()=>{disposed=true;observer?.disconnect();if(plot.value&&!drawin
       </div>
     </div>
     <p v-if="!result" class="hint">待拟合 · 当前显示原谱与预检背景</p>
-    <p v-else class="hint">总拟合 = 背景 + 各净峰 · 残差 = 实测 − 拟合</p>
+    <p v-else class="hint">总拟合 = 背景 + 各净峰 · 残差 = 实测 − 拟合 · 强度沿用原单位</p>
     <p v-if="error" role="alert" class="error">{{error}}</p>
-    <div ref="container" class="batch-plot-container" :style="fill?undefined:{height:`${chartHeight}px`}"><div ref="plot" data-test="batch-plot" class="batch-plot" :style="{height:fill?'100%':`${chartHeight}px`}" :aria-label="result?'拟合曲线与残差图':'原谱与背景图'"/></div>
+    <div ref="container" class="batch-plot-container" :style="fill?undefined:{height:`${chartHeight}px`}"><div ref="plot" data-test="batch-plot" class="batch-plot" role="region" :style="{height:fill?'100%':`${chartHeight}px`}" :aria-label="result?'拟合曲线与残差图':'原谱与背景图'"/></div>
   </section>
 </template>
 

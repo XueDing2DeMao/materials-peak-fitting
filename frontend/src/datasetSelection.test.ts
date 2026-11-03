@@ -20,6 +20,19 @@ vi.mocked(api.loadDatasetRows).mockImplementation(async(_id,name,offset=0,limit=
 afterEach(()=>{wrappers.splice(0).forEach(w=>w.unmount());vi.restoreAllMocks();});
 async function app(){const w=mount(App,{global:{stubs:{MultiPeakWorkbench:{name:'MultiPeakWorkbench',emits:['work'],props:['x','y','source'],template:'<div />'},XpsWorkbench:true,BatchWorkbench:true}}});wrappers.push(w);w.getComponent(DatasetSummary).vm.$emit('upload',new File(['x'],'Raman.xlsx'));await flushPromises();return w;}
 describe('导入数据核对',()=>{
+  it('已应用 rad 谱后切换 XRD 阻止拟合，新导入冲突列也不能应用，切回通用可继续',async()=>{
+    const columns=['2Theta [rad]','counts'];
+    vi.mocked(api.uploadDataset).mockResolvedValue({...workbook,sheets:[{...workbook.sheets[0],columns,numeric_columns:columns}]});
+    const w=await app(),d=w.getComponent(DatasetSummary);
+    await d.get('[data-test="apply-selection"]').trigger('click');await flushPromises();
+    await w.get('[data-test="analysis-mode"]').setValue('xrd');
+    expect(w.findComponent({name:'MultiPeakWorkbench'}).exists()).toBe(false);
+    expect(w.get('[data-test="single-unit-conflict"]').text()).toContain('rad');
+    d.vm.$emit('upload',new File(['x'],'other.csv'));await flushPromises();
+    expect(d.get('[data-test="apply-selection"]').attributes('disabled')).toBeDefined();
+    await w.get('[data-test="analysis-mode"]').setValue('single');
+    expect(w.findComponent({name:'MultiPeakWorkbench'}).exists()).toBe(true);
+  });
   it('清理详情直接展示行记录，切换标签保留列草稿且不会提交，关闭返回摘要入口',async()=>{
     const selected={sheet:'Figure2bc',xColumn:'mean',yColumn:'error'};
     const audit={version:1 as const,row_basis:'parsed_sheet_after_empty_rows_removed' as const,sheet_rows:3,valid_pairs:2,excluded_pairs:1,exclusion_reasons:{y_missing:1},excluded_rows:[{parsed_row:3,reasons:['y_missing']}],excluded_rows_truncated:false,source_rows:[1,2],sorting_changed:false,duplicate_x_count:1};

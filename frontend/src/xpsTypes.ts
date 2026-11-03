@@ -20,7 +20,7 @@ export interface XpsPreview {
   x: number[]; x_raw: number[]; raw_y: number[]; baseline: number[];
   background: {kind:string; iterations:number; converged:boolean; low_level?:number; high_level?:number};
 }
-export interface XpsParameterResult {value:number; standard_error:number|null; uncertainty_reason:string|null; linked_to:string|null; fixed:boolean; bound:boolean}
+export interface XpsParameterResult {value:number; standard_error:number|null; confidence_interval?:[number,number]|null; uncertainty_reason:string|null; linked_to:string|null; fixed:boolean; bound:boolean}
 export interface XpsComponentResult {
   id:string; label:string; model:XpsModel; parameters:Record<string,XpsParameterResult>; y:number[];
   area_total:number; area_window:number; area_fraction_window:number|null; height:number; fwhm:number|null;

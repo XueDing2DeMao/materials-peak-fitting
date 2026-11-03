@@ -12,6 +12,7 @@ import PeakResultTable from './PeakResultTable.vue';
 import SamplingDiagnostics from './SamplingDiagnostics.vue';
 import {snapshotPeaks,snapshotUnit} from '../analysisSnapshot';
 import BatchResultChart from './BatchResultChart.vue';
+const menu=ref<HTMLDetailsElement|null>(null);
 const props=defineProps<{capture:()=>SingleSession|BatchSession;restore:(a:SessionArchive)=>Promise<void>;busy:boolean;scopeLabel?:string}>();
 const fileInput=ref<HTMLInputElement|null>(null),sourceInput=ref<HTMLInputElement|null>(null),working=ref(false),error=ref(''),message=ref(''),candidate=ref<SessionArchive|null>(null),selected=ref(0);
 const readOnlyEntries=computed<ReportEntry[]>(()=>{
@@ -19,7 +20,7 @@ const readOnlyEntries=computed<ReportEntry[]>(()=>{
   return w.kind==='single'?[{label:w.configuration.source?.filename??'单谱',snapshot:w.result,status:'只读预览'}]:w.rows.map(r=>({label:r.label,status:r.status,snapshot:r.result?{engine:isMulti(r.result.configuration)?'multi':'xps',configuration:r.result.configuration,result:r.result,stale:r.status==='pending',accepted:r.attempts.some(a=>a.id===r.accepted_attempt_id&&a.manually_accepted)}:null}));
 });
 const selectedSnapshot=computed(()=>readOnlyEntries.value[selected.value]?.snapshot);
-function save(){error.value='';message.value='';try{saveFile('spectral-fit-session-v1.json',writeSession(props.capture()),'application/json');message.value='已生成分析进度下载文件。请保管下载的 JSON；刷新或关闭页面不会自动保存。';}catch(e){error.value=String(e);}}
+function save(){if(menu.value){menu.value.open=true;menu.value.querySelector('summary')?.focus();}error.value='';message.value='';try{saveFile('spectral-fit-session-v1.json',writeSession(props.capture()),'application/json');message.value='已生成分析进度下载文件。请保管下载的 JSON；刷新或关闭页面不会自动保存。';}catch(e){error.value=String(e);}}
 async function commit(a:SessionArchive){
   if(props.busy)throw new Error('当前计算或导入尚未结束，请完成或暂停后再恢复。');
   if(!await confirmDiscard(true,`载入将替换当前${a.workspace.kind==='batch'?'目标分析类型的批次':'通用、XRD 和 XPS 单谱'}工作区。结果与历史按文件恢复，不自动求解；继续前需重新复核背景。`))return;
@@ -49,7 +50,7 @@ async function attach(event:Event){
   }catch(e){error.value=`原谱匹配失败，当前工作未替换：${String(e)}`;}finally{working.value=false;input.value='';}
 }
 </script>
-<template><details class="panel session-actions"><summary>分析进度 · 保存与恢复</summary>
+<template><div class="session-control"><button class="session-quick-save" :disabled="busy||working" @click="save">保存会话</button><details ref="menu" class="panel session-actions"><summary>恢复与记录</summary>
   <p class="hint session-save-scope">保存范围：{{scopeLabel??'当前单谱或批次分析'}}，包含原谱、拟合设置与已保存的结果。其他工作区不包含在此文件中。</p>
   <p class="hint">手动保存当前单谱或批次的原谱、配置、结果、尝试与实验记录。不会自动保存，不含未纳入批次的草稿和方案比较临时编辑。最多 100 MiB、100 条谱线、200,000 个原谱点。</p>
   <div class="xps-actions"><button :disabled="busy||working" @click="save">保存分析进度</button><button :disabled="busy||working" @click="fileInput?.click()">恢复分析进度</button></div>
@@ -65,5 +66,5 @@ async function attach(event:Event){
     </template><p v-else>该谱没有拟合结果。</p>
     <AnalysisReportActions :entries="readOnlyEntries" :disabled="working" />
   </section>
-</details></template>
+</details></div></template>
 <style scoped>.session-actions{margin:12px 0;min-width:0}.session-actions button{height:auto;min-height:40px;white-space:normal}.session-actions p{overflow-wrap:anywhere}</style>

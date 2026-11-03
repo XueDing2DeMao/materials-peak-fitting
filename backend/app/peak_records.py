@@ -198,6 +198,9 @@ def adapt_internal_result(engine: str, result: dict, source: dict | None = None,
             ('height', 'peak_height', '', 'height', y_unit),
             ('area', 'area_total', 'A', 'total', f'{y_unit}*{unit}' if 'unknown' not in (y_unit, unit) else 'unknown')):
             p = params.get(param, {})
+            if name == 'height' and 'peak_height_uncertainty' in g:
+                p = g['peak_height_uncertainty']
+                if not isinstance(p, dict): raise ValueError('峰高不确定度必须为对象')
             value = g.get(geom)
             source_column = f'peak_geometry.{geom}'
             if geom not in g:

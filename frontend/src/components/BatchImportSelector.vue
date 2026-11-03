@@ -64,7 +64,7 @@ function applyRule(){
     <div><strong>待纳入：{{files.length}} 个文件</strong><p class="hint">已选 {{selectedFileCount}} 个文件 · {{count}} 条谱线。确认列选择后才加入当前批次。</p></div>
     <button ref="trigger" type="button" class="primary" :disabled="disabled" :aria-expanded="opened" aria-haspopup="dialog" @click="open">选择 X / Y 数据</button>
     <dialog ref="dialog" class="parameter-dialog batch-column-dialog" aria-label="选择 X / Y 数据" @cancel.prevent="close()" @close="opened=false">
-      <header class="parameter-dialog-header"><div><h2>选择 X / Y 数据</h2><p class="hint">{{files.length}} 个文件 · {{drafts.length}} 个可选工作表 · 每个 Y 列生成一条谱线</p></div><div class="column-progress" role="status" data-test="batch-mapping-progress"><strong>已配置 {{completedFiles}} / {{files.length}} 个文件</strong><progress :value="completedFiles" :max="files.length" aria-label="文件映射完成度" /><small>{{completedFiles===files.length?'所选列已配置，请核对后纳入':`还有 ${files.length-completedFiles} 个文件未配置有效 Y，可按需纳入部分文件`}}</small></div></header>
+      <header class="parameter-dialog-header"><div><h2>导入数据与列映射</h2><p class="hint">{{files.length}} 个文件 · {{drafts.length}} 个可选工作表 · 每个 Y 列生成一条谱线</p></div><div class="column-progress" role="status" data-test="batch-mapping-progress"><strong>已配置 {{completedFiles}} / {{files.length}} 个文件</strong><progress :value="completedFiles" :max="files.length" aria-label="文件映射完成度" /><small>{{completedFiles===files.length?'所选列已配置，请核对后纳入':`还有 ${files.length-completedFiles} 个文件未配置有效 Y，可按需纳入部分文件`}}</small></div></header>
       <div class="column-global-actions" role="group" aria-label="全部文件 Y 选择">
         <div class="column-actions"><strong>全部文件</strong><button type="button" data-test="batch-select-all" :disabled="disabled" @click="select(drafts,true)">选择全部候选 Y</button><button type="button" data-test="batch-clear-all" :disabled="disabled||!count" @click="select(drafts,false)">清空全部 Y</button></div>
         <p class="hint">作用于全部 {{files.length}} 个文件（含搜索隐藏项），请核对误差、温度等列。</p>
@@ -73,8 +73,8 @@ function applyRule(){
         <aside class="column-file-panel" aria-label="导入文件列表">
           <label>搜索文件<input v-model="fileSearch" type="search" placeholder="输入文件名" /></label>
           <div class="column-file-list">
-            <button v-for="file in visibleFiles" :key="file.dataset_id" type="button" :aria-label="`配置文件 ${file.filename}`" :aria-pressed="active?.dataset.dataset_id===file.dataset_id" @click="chooseFile(file.dataset_id)">
-              <strong :title="file.filename">{{file.filename}}</strong><span>{{sheets(file.dataset_id).length}} 个工作表 · {{fileCount(file.dataset_id)}} 个 Y 已选</span>
+            <button v-for="file in visibleFiles" :key="file.dataset_id" type="button" :data-file-name="file.filename" :aria-pressed="active?.dataset.dataset_id===file.dataset_id" @click="chooseFile(file.dataset_id)">
+              <span class="sr-only">配置文件 </span><strong :title="file.filename">{{file.filename}}</strong><span>{{sheets(file.dataset_id).length}} 个工作表 · {{fileCount(file.dataset_id)}} 个 Y 已选</span>
               <small :class="{'column-issue':fileIssue(file.dataset_id)}">{{fileIssue(file.dataset_id)?'! 需处理':fileCount(file.dataset_id)?'✓ 已选择':'待选择'}}</small>
             </button>
             <p v-if="!visibleFiles.length" class="hint">没有匹配的文件。<button type="button" @click="fileSearch=''">清除搜索</button></p>
@@ -83,15 +83,15 @@ function applyRule(){
         <section v-if="active" class="column-editor" aria-label="当前工作表列配置">
           <div class="column-editor-heading"><div><h3>{{active.dataset.filename}}</h3><p class="hint">{{sheet(active).row_count}} 行 · 已选 {{active.yColumns.length}} 个 Y</p></div><label>工作表<select v-model="activeKey" aria-label="配置工作表"><option v-for="d in sheets(active.dataset.dataset_id)" :key="d.key" :value="d.key">{{d.sheet}} · {{d.yColumns.length}} 个 Y</option></select></label></div>
           <p class="hint">X 单选，Y 可多选。请核对各列含义；误差列不会自动用于加权。</p>
+          <div class="column-x-selection"><label>X 列<select :value="active.xColumn" :aria-label="`${active.dataset.filename} / ${active.sheet} X 列`" @change="setX(active,($event.target as HTMLSelectElement).value)"><option v-for="name in sheet(active).numeric_columns" :key="name" :value="name">{{name}}</option></select></label><p class="hint">已选 X 列不会作为 Y 纳入。</p></div>
           <div class="column-tools"><label class="column-search">搜索列<input v-model="columnSearch" type="search" placeholder="输入列名" /></label><button type="button" :aria-pressed="fullNames" @click="fullNames=!fullNames">{{fullNames?'收起完整列名':'展开完整列名'}}</button></div>
           <div class="column-role-scroll" tabindex="0" role="region" aria-label="X Y 列角色表">
-            <table class="column-role-table"><colgroup><col class="role-name" /><col class="role-sample" /><col class="role-choice" /><col class="role-choice" /></colgroup><thead><tr><th scope="col">列名</th><th scope="col">前 3 行示例</th><th scope="col">X</th><th scope="col">Y</th></tr></thead><tbody>
+            <table class="column-role-table"><colgroup><col class="role-name" /><col class="role-sample" /><col class="role-choice" /></colgroup><thead><tr><th scope="col">列名</th><th scope="col">前 3 行示例</th><th scope="col">作为 Y</th></tr></thead><tbody>
               <tr v-for="c in columns" :key="c.name" :class="{'is-x':active.xColumn===c.name,'is-y':active.yColumns.includes(c.name)}">
                 <th scope="row"><span class="column-name" :title="c.name" :class="{'is-expanded':fullNames}">{{c.name}}</span><small>第 {{c.index}} 列{{c.numeric?' · 数值列':' · 非数值列，不可选'}}</small></th><td><span class="column-sample">{{c.sample}}</span></td>
-                <td><label class="role-control"><input type="radio" :name="`x-column-${active.key}`" :checked="active.xColumn===c.name" :disabled="!c.numeric" :aria-label="`${active.dataset.filename} / ${active.sheet} X 列 ${c.name}`" @change="setX(active,c.name)" /></label></td>
                 <td><label class="role-control"><input v-model="active.yColumns" type="checkbox" :value="c.name" :disabled="!c.numeric||active.xColumn===c.name" :aria-label="`${active.dataset.filename} / ${active.sheet} 纳入 ${c.name}`" @change="edited(active)" /></label></td>
               </tr>
-              <tr v-if="!columns.length"><td colspan="4">没有匹配的列。<button type="button" @click="columnSearch=''">清除搜索</button></td></tr>
+              <tr v-if="!columns.length"><td colspan="3">没有匹配的列。<button type="button" @click="columnSearch=''">清除搜索</button></td></tr>
             </tbody></table>
           </div>
           <div class="column-actions"><button type="button" @click="select([active],true)">选择本表其余数值列</button><button type="button" :disabled="!active.yColumns.length" @click="select([active],false)">清空本表 Y</button><button ref="ruleTrigger" type="button" :disabled="!active.yColumns.length||!otherSheets.length" @click="showRule">应用列规则到其他文件…</button></div>
@@ -104,7 +104,7 @@ function applyRule(){
             <div class="column-rule-targets"><label v-for="m in mappings" :key="m.target.key" class="column-rule-target"><input v-model="ruleTargets" type="checkbox" :value="m.target.key" :aria-label="`应用规则到 ${m.target.dataset.filename} / ${m.target.sheet}`" /><span><strong>{{m.target.dataset.filename}} / {{m.target.sheet}}</strong><small :class="{'column-issue':m.error}">{{m.error?`无法匹配：${m.error}`:`X：${m.xColumn} → Y：${m.yColumns.join('、')}`}}</small></span></label></div>
             <button type="button" class="primary" :disabled="!applicable.length" @click="applyRule">应用到 {{applicable.length}} 个匹配工作表</button>
           </section>
-          <details :key="active.key" class="column-preview"><summary>核对前 5 行原始数据</summary><DataSelectionPreview :sheet="sheet(active)" :x-column="active.xColumn" :y-column="active.yColumns[0]??''" /><button type="button" @click="browser?.open(active.dataset,$event)">查看全部数据</button></details>
+          <details :key="active.key" class="column-preview"><summary>映射预览 · 前 5 行原始数据</summary><DataSelectionPreview :sheet="sheet(active)" :x-column="active.xColumn" :y-column="active.yColumns[0]??''" /><button type="button" @click="browser?.open(active.dataset,$event)">查看全部数据</button></details>
         </section>
       </fieldset>
       <footer class="column-picker-footer">

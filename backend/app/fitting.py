@@ -14,7 +14,7 @@ from scipy.stats import t as student_t
 
 from .baselines import Anchor, build_baseline
 from .peaks import ASYMMETRIC_MODELS, evaluate_peak, model_parameter_names
-from .peak_properties import peak_geometry
+from .peak_properties import add_height_uncertainty, peak_geometry
 
 
 SUPPORTED_COMPARISON_MODELS = ("gaussian", "lorentz", "psd_voigt1", "psd_voigt2")
@@ -248,10 +248,17 @@ def _initial_values(
 def _covariance_and_errors(
     jacobian: NDArray[np.float64], sse: float, degrees_of_freedom: int
 ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None]:
-    if degrees_of_freedom <= 0:
+    if degrees_of_freedom <= 0 or not jacobian.shape[1]:
         return None, None
     try:
-        covariance = np.linalg.pinv(jacobian.T @ jacobian) * (sse / degrees_of_freedom)
+        # 不同物理量的数量级不能决定有效秩。按列归一化后反变换回参数原单位。
+        scales = np.linalg.norm(jacobian, axis=0)
+        if np.any(scales == 0):
+            return None, None
+        _, singular, vt = np.linalg.svd(jacobian/scales, full_matrices=False)
+        if singular[-1] <= singular[0]*1e-7:
+            return None, None
+        covariance = ((vt.T * ((sse/degrees_of_freedom)/singular**2)) @ vt) / np.outer(scales, scales)
         return covariance, np.sqrt(np.clip(np.diag(covariance), 0, None))
     except np.linalg.LinAlgError:
         return None, None
@@ -461,20 +468,24 @@ def fit_single_peak(request: FitInput) -> FitResult:
     adjusted = 1 - (1 - r_squared) * (len(x) - 1) / degrees_of_freedom if degrees_of_freedom > 0 else None
     covariance, errors = _covariance_and_errors(jacobian, sse, degrees_of_freedom)
     uncertainty_reason = None
-    if request.model in ASYMMETRIC_MODELS and free_names:
+    if free_names:
         scales=np.linalg.norm(jacobian,axis=0)
         singular=np.linalg.svd(jacobian/np.where(scales>0,scales,1),compute_uv=False)
         rank=int(np.sum(singular>singular[0]*1e-7)) if singular.size and singular[0] else 0
+        # 必须用物理参数检查边界；LM 的面积、宽度等优化坐标经过了变换。
+        free_values = [optimized_parameters[name] for name in free_names]
         # 宽度的诊断随 X 单位缩放；峰位采用区间跨度，避免大坐标偏置。
         bound_scales=[float(x[-1]-x[0]) if name=='xc' else 1. if name=='mu' else max(abs(value),np.finfo(float).tiny)
-                      for name,value in zip(free_names,optimization.x)]
+                      for name,value in zip(free_names,free_values)]
         on_bound=any(value-lo<=1e-6*scale or hi-value<=1e-6*scale
-                     for value,lo,hi,scale in zip(optimization.x,free_lower,free_upper,bound_scales))
+                     for value,lo,hi,scale in zip(free_values,free_lower,free_upper,bound_scales))
         weak_tail=request.model.startswith('emg_') and optimized_parameters['tau']/optimized_parameters['sigma']<1e-3 and 'tau' in free_names
         uncertainty_reason=('优化未收敛' if not converged else '雅可比秩不足，参数不能独立辨识' if rank<len(free_names) else
                             '存在贴边参数，线性协方差不适用' if on_bound else '拖尾接近高斯极限，sigma/tau 难以独立辨识' if weak_tail else None)
         if uncertainty_reason:covariance,errors=None,None
     ci_multiplier = float(student_t.ppf(0.975, degrees_of_freedom)) if degrees_of_freedom > 0 else None
+    if free_names and covariance is None and uncertainty_reason is None:
+        uncertainty_reason = '残差自由度不足' if degrees_of_freedom<=0 else '雅可比秩不足或协方差不可用'
     parameters = {
         name: ParameterEstimate(
             optimized_parameters[name],
@@ -501,6 +512,10 @@ def fit_single_peak(request: FitInput) -> FitResult:
     for name in ("w", "wG", "wL"):
         if name in optimized_parameters:
             derived_parameters[f"{name}_fwhm"] = float(optimized_parameters[name])
+    geometry = peak_geometry(request.model, optimized_parameters, float(x[0]), float(x[-1]))
+    height_reason = uncertainty_reason
+    free_terms = {name:(i,1.) for i,name in enumerate(free_names) if name in ('A','w')}
+    add_height_uncertainty(geometry, request.model, optimized_parameters, free_terms, covariance, ci_multiplier, height_reason)
     return FitResult(
         x=x,
         raw_y=y,
@@ -553,7 +568,7 @@ def fit_single_peak(request: FitInput) -> FitResult:
             "name": "单阶段拟合", "center_fixed": "xc" in fixed, "evaluations": iterations,
             "converged": converged,
         }],
-        peak_geometry=peak_geometry(request.model, optimized_parameters, float(x[0]), float(x[-1])),
+        peak_geometry=geometry,
     )
 
 

@@ -2,11 +2,14 @@
 import numpy as np
 from scipy.signal import find_peaks, peak_widths
 from .baselines import Anchor
+from .spectrum_units import validate_axis_unit
 from .fitting import FitInput, preview_fixed_baseline
 from .multipeak_core import fit_components, validate_components
 
 
 def preview_multipeak(request):
+    if request.source:
+        validate_axis_unit(request.analysis_mode, request.source.x_column)
     b = request.baseline
     x, y, baseline, anchors = preview_fixed_baseline(FitInput(
         x=np.asarray(request.x), y=np.asarray(request.y), model='gaussian', baseline_kind=b.kind,

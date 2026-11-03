@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .baselines import Anchor
+from .dataset_rows import dataset_page
 from .datasets import ParsedWorkbook, parse_upload, select_xy
 from .fitting import FitInput, FitResult, analyze_single_peak, compare_single_peak_models, fit_single_peak, preview_fixed_baseline
 from .schemas import ExportPayload, FitPayload, ModelComparisonPayload, PreviewPayload
@@ -23,7 +24,7 @@ from .xps_routes import router as xps_router
 from .multipeak_routes import router as multipeak_router
 from .result_import.routes import router as result_import_router
 from .calculations.routes import router as calculations_router
-from .peak_properties import geometry_rows
+from .peak_properties import derived_error_cells, geometry_rows, quantity_unit
 
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -62,7 +63,8 @@ def _sheet_summary(workbook: ParsedWorkbook) -> list[dict[str, object]]:
             "columns": [str(column) for column in sheet.frame.columns],
             "numeric_columns": sheet.numeric_columns,
             "row_count": int(len(sheet.frame)),
-            "preview_rows": sheet.frame.head(5).where(sheet.frame.notna(), None).to_dict(orient="records"),
+            "preview_rows": [dict(zip(sheet.frame.columns, row))
+                             for row in dataset_page(workbook, sheet.name, limit=5)["rows"]],
         }
         for sheet in workbook.sheets
     ]
@@ -155,7 +157,6 @@ def preview(payload: PreviewPayload) -> dict[str, object]:
 
 @app.get("/api/datasets/{dataset_id}/rows")
 def dataset_rows(dataset_id: str, sheet: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)) -> dict:
-    from .dataset_rows import dataset_page
     _discard_expired_datasets()
     stored = _datasets.get(dataset_id)
     if stored is None:
@@ -264,20 +265,24 @@ def export(payload: ExportPayload) -> Response:
     buffer = StringIO(newline="")
     writer = csv.writer(buffer, lineterminator="\n")
     result = payload.result
+    metadata = result.get("analysis_metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    x_unit = metadata.get("x_unit") or "X 单位"
+    y_unit = metadata.get("y_unit") or "Y 单位"
     if payload.kind == "curves":
         names = ["x", "raw_y", "baseline", "net_y", "peak_y", "total_y", "residual"]
         columns = [result.get(name) for name in names]
         if not all(isinstance(column, list) for column in columns) or len({len(column) for column in columns}) != 1:
             raise HTTPException(status_code=422, detail="曲线导出需要长度一致的全部拟合曲线")
-        writer.writerow(names)
-        writer.writerows(zip(*columns, strict=True))
+        writer.writerow([*names, "x_unit", "y_unit"])
+        writer.writerows([*row, x_unit, y_unit] for row in zip(*columns, strict=True))
         filename = "curves.csv"
     else:
         parameters = result.get("parameters")
         statistics = result.get("statistics")
         if not isinstance(parameters, dict) or not isinstance(statistics, dict):
             raise HTTPException(status_code=422, detail="参数导出需要参数和拟合统计量")
-        writer.writerow(["parameter", "value", "standard_error", "ci95_lower", "ci95_upper", "lower_bound", "upper_bound", "fixed", "uncertainty_reason"])
+        writer.writerow(["parameter", "value", "standard_error", "ci95_lower", "ci95_upper", "lower_bound", "upper_bound", "fixed", "uncertainty_reason", "unit"])
         for name, value in parameters.items():
             if not isinstance(value, dict):
                 raise HTTPException(status_code=422, detail="参数格式无效")
@@ -285,7 +290,7 @@ def export(payload: ExportPayload) -> Response:
             lower_ci, upper_ci = (confidence_interval if isinstance(confidence_interval, list) and len(confidence_interval) == 2 else (None, None))
             writer.writerow([
                 name, value.get("value"), value.get("standard_error"), lower_ci, upper_ci,
-                value.get("lower_bound"), value.get("upper_bound"), value.get("fixed"), value.get("uncertainty_reason"),
+                value.get("lower_bound"), value.get("upper_bound"), value.get("fixed"), value.get("uncertainty_reason"), quantity_unit(name,x_unit,y_unit),
             ])
         writer.writerow([])
         writer.writerow(["fit_configuration", "value"])
@@ -298,23 +303,25 @@ def export(payload: ExportPayload) -> Response:
                 writer.writerow([f"baseline_{name}", value])
         for name in ("solver", "iterations", "converged", "message"):
             writer.writerow([name, result.get(name, "")])
-        metadata = result.get("analysis_metadata", {})
-        if isinstance(metadata, dict):
-            for name, value in metadata.items():
-                writer.writerow([f"analysis_{name}", value])
+        for name, value in metadata.items():
+            writer.writerow([f"analysis_{name}", value])
         writer.writerow([])
-        writer.writerow(["metric", "value"])
-        writer.writerows(statistics.items())
+        writer.writerow(["metric", "value", "unit"])
+        writer.writerows([name,value,quantity_unit(name,x_unit,y_unit)] for name,value in statistics.items())
         derived = result.get("derived_parameters", {})
         if isinstance(derived, dict):
             writer.writerow([])
-            writer.writerow(["derived_parameter", "value"])
-            writer.writerows(derived.items())
+            writer.writerow(["derived_parameter", "value", "unit", "standard_error", "ci95_lower", "ci95_upper", "uncertainty_reason"])
+            geometry = result.get('peak_geometry')
+            for name,value in derived.items():
+                row = [name,value,quantity_unit(name,x_unit,y_unit)]
+                row.extend(derived_error_cells(name,result.get('model'),parameters,geometry if isinstance(geometry,dict) else {}))
+                writer.writerow(row)
             writer.writerow(["legacy.area_in_range.method", "采样点梯形积分"])
         if isinstance(result.get("peak_geometry"), dict):
             writer.writerow([])
-            writer.writerow(["peak_geometry", "value", "unit", "reason"])
-            writer.writerows(geometry_rows(result["peak_geometry"]))
+            writer.writerow(["peak_geometry", "value", "unit", "reason", "standard_error", "ci95_lower", "ci95_upper"])
+            writer.writerows(geometry_rows(result["peak_geometry"], x_unit, y_unit))
         filename = "parameters.csv"
     return Response(
         content=buffer.getvalue(), media_type="text/csv; charset=utf-8",

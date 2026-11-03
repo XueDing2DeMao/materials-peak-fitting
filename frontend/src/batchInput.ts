@@ -2,8 +2,14 @@ import { clone } from './multipeakState';
 import { isMulti } from './fitAdapter';
 import type { BatchRequest } from './batchTypes';
 import type { XpsSource } from './xpsTypes';
+import { axisUnitConflict } from './spectrumUnits';
+export function validateBatchUnits(request:BatchRequest){
+  const conflict=axisUnitConflict(isMulti(request)?request.analysis_mode:'xps',request.source?.x_column);
+  if(conflict)throw new Error(conflict);
+}
 export function prepareRequest(template:BatchRequest,data:{x:number[];y:number[]},source:XpsSource|null,fixedBaseline:boolean):BatchRequest {
   const c=clone(template);c.x=[...data.x];c.y=[...data.y];c.source=clone(source);
+  validateBatchUnits(c);
   if(c.x.length!==c.y.length||c.x.length<4||c.x.some((v,i)=>!Number.isFinite(v)||!Number.isFinite(c.y[i])))throw new Error('当前谱有效数据不足或包含非有限值');
   if(c.x.some((v,i)=>i>0&&v<=c.x[i-1]))throw new Error('X 数据必须递增且不能重复');
   const shifted=isMulti(c)?c.x:c.x.map(x=>x+c.shift_eV);

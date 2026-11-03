@@ -38,13 +38,35 @@ async function preparedBatch(failedColumn?:string,prepare=true){
 }
 
 describe('批量结果浏览与背景复核',()=>{
+  it('失败项快捷入口清除筛选并定位，展开结果不重新运行拟合',async()=>{
+    const w=await preparedBatch(),original=vi.mocked(multi.fitMulti).getMockImplementation()!;
+    vi.mocked(multi.fitMulti).mockImplementation(async request=>{
+      if(request.source?.y_column==='b')throw new Error('测试求解失败');
+      return original(request);
+    });
+    await w.get('[data-test="batch-confirm-all"]').trigger('click');
+    await w.get('[data-test="batch-start"]').trigger('click');await flushPromises();
+    await w.get('[data-test="batch-view-3"]').trigger('click');
+    await w.get('[data-test="batch-search"]').setValue('c');
+    await w.get('[data-test="batch-locate-failure"]').trigger('click');await flushPromises();
+    expect(w.get('[data-test="batch-detail-title"]').text()).toContain('/ b');
+    expect(w.findAll('[data-test="batch-row"]')).toHaveLength(3);
+    expect(w.get('[data-test="batch-warning"]').text()).toContain('测试求解失败');
+    const calls=vi.mocked(multi.fitMulti).mock.calls.length;
+    await w.get('[data-test="batch-expand-results"]').trigger('click');
+    expect(w.classes()).toContain('results-expanded');
+    expect(w.get('[data-test="batch-expand-results"]').attributes('aria-expanded')).toBe('true');
+    await w.get('[data-test="batch-expand-results"]').trigger('click');
+    expect(w.classes()).not.toContain('results-expanded');
+    expect(multi.fitMulti).toHaveBeenCalledTimes(calls);
+  });
   it('批量复核所选跨筛选保留，查看谱线不勾选，撤销不影响原有复核',async()=>{
     const w=await preparedBatch();
     await w.get('[data-test="batch-confirm-current"]').trigger('click');
     await w.get('[data-test="batch-bulk-toggle"]').trigger('click');
     expect(w.get('[aria-label="选择批量复核谱线 1"]').attributes('disabled')).toBeDefined();
     await w.get('[aria-label="选择批量复核谱线 2"]').setValue(true);
-    await w.get('[aria-label="查看谱线 3"]').trigger('click');
+    await w.get('[data-test="batch-view-3"]').trigger('click');
     expect((w.get('[aria-label="选择批量复核谱线 3"]').element as HTMLInputElement).checked).toBe(false);
     await w.get('[data-test="batch-search"]').setValue('no-match');
     expect(w.get('[data-test="batch-bulk-scope"]').text()).toContain('1 条在筛选之外');
@@ -212,7 +234,7 @@ describe('批量结果浏览与背景复核',()=>{
       if(request.source?.y_column==='a')r.diagnostics.bound_parameters=['p1.A'];return r;
     });
     await w.get('[data-test="batch-confirm-all"]').trigger('click');await w.get('[data-test="batch-start"]').trigger('click');await flushPromises();
-    await w.get('[aria-label="查看谱线 3"]').trigger('click');await w.get('[data-test="batch-search"]').setValue('c');
+    await w.get('[data-test="batch-view-3"]').trigger('click');await w.get('[data-test="batch-search"]').setValue('c');
     await w.get('[data-test="batch-step-export"]').trigger('click');
     const panel=w.get('[data-test="batch-export-panel"]');
     expect(panel.get('[data-test="export-status-summary"]').text()).toContain('已完成计算 1');
@@ -235,7 +257,7 @@ describe('批量结果浏览与背景复核',()=>{
   it('统一导出绑定当前谱、整个批次及当前趋势选择',async()=>{
     const w=await preparedBatch();await w.get('[data-test="batch-confirm-all"]').trigger('click');
     await w.get('[data-test="batch-start"]').trigger('click');await flushPromises();
-    await w.get('[aria-label="查看谱线 2"]').trigger('click');
+    await w.get('[data-test="batch-view-2"]').trigger('click');
     const fit=vi.spyOn(batchExports,'exportBatch').mockImplementation(()=>{});
     const trend=vi.spyOn(batchExports,'exportBatchTrend').mockImplementation(()=>{});
     await w.get('[data-test="batch-step-export"]').trigger('click');
@@ -415,9 +437,9 @@ describe('批量结果浏览与背景复核',()=>{
   });
   it('方向键查看下一条时，焦点同步到新谱线按钮',async()=>{
     const w=await preparedBatch();
-    const first=w.get('[aria-label="查看谱线 1"]');(first.element as HTMLButtonElement).focus();
+    const first=w.get('[data-test="batch-view-1"]');(first.element as HTMLButtonElement).focus();
     await first.trigger('keydown',{key:'ArrowDown'});await flushPromises();
-    expect(document.activeElement).toBe(w.get('[aria-label="查看谱线 2"]').element);
+    expect(document.activeElement).toBe(w.get('[data-test="batch-view-2"]').element);
   });
   it('全部复核覆盖筛选隐藏的有效谱线，跳过失败项；撤销保留原先的人工复核',async()=>{
     const w=await preparedBatch('c');
@@ -448,7 +470,7 @@ describe('批量结果浏览与背景复核',()=>{
     const w=await preparedBatch();
     vi.mocked(multi.fitMulti).mockImplementation(async request=>({configuration:request,x:request.x,raw_y:request.y,baseline:request.x.map(()=>0),total_y:request.y,residuals:request.x.map(()=>0),converged:true,statistics:{rmse:190},components:[{id:'p1',parameters:{xc:{value:2}},area_total:3}],diagnostics:{identifiable:false,bound_parameters:[],strong_correlations:[],warnings:[]}} as any));
     await w.get('[data-test="batch-confirm-all"]').trigger('click');
-    await w.get('[aria-label="查看谱线 2"]').trigger('click');
+    await w.get('[data-test="batch-view-2"]').trigger('click');
     await w.get('[data-test="batch-start"]').trigger('click');await flushPromises();
     expect(w.get('[data-test="batch-status"]').text()).toContain('已计算 3 / 3');
     expect(w.get('[data-test="batch-status"]').text()).toContain('待复核 3');
@@ -474,7 +496,7 @@ describe('批量结果浏览与背景复核',()=>{
     const w=await preparedBatch();
     await w.get('[data-test="batch-search"]').setValue('b');
     expect(w.findAll('[data-test="batch-row"]')).toHaveLength(1);
-    await w.get('[aria-label="查看谱线 2"]').trigger('click');
+    await w.get('[data-test="batch-view-2"]').trigger('click');
     expect(w.get('[data-test="batch-detail-title"]').text()).toContain('b');
     await w.get('[data-test="batch-search"]').setValue('');
     await w.get('[data-test="batch-next"]').trigger('click');
@@ -494,7 +516,7 @@ describe('批量结果浏览与背景复核',()=>{
     await w.get('[data-test="batch-step-review"]').trigger('click');
     expect((w.get('[data-test="batch-confirm-all"]').element as HTMLButtonElement).disabled).toBe(true);
     await w.get('[data-test="batch-step-results"]').trigger('click');
-    await w.get('[aria-label="查看谱线 2"]').trigger('click');
+    await w.get('[data-test="batch-view-2"]').trigger('click');
     resolve();await flushPromises();
     expect(w.get('[data-test="batch-detail-title"]').text()).toContain('b');
     expect(w.get('[data-test="batch-status"]').text()).toContain('已结束');
@@ -538,6 +560,37 @@ describe('批量界面',()=>{
     expect(w.text()).toContain('XRD · 顺序拟合');expect(w.text()).toContain('1 个启用峰');
     await load(JSON.stringify({configuration:{...c,analysis_mode:'general'}}));
     expect(w.get('[role="alert"]').text()).toContain('类型');expect(w.text()).toContain('1 个启用峰');
-    await load('{');expect(w.find('[role="alert"]').exists()).toBe(true);expect(w.text()).toContain('1 个启用峰');w.unmount();
+    await load('{');expect(w.get('[role="alert"]').text()).toContain('模板 JSON 格式无效');expect(w.text()).toContain('1 个启用峰');w.unmount();
   });
+});
+
+
+it('XPS逐谱背景缺少端点窗口时提前说明，补齐窗口后提示消失且不改写模板',async()=>{
+  const Component=(await import('./components/BatchWorkbench.vue')).default;
+  const c=createXpsConfig([1,2,3],[1,3,2],null);addXpsComponent(c);
+  c.background.kind='shirley';c.background.low_window=null;c.background.high_window=null;
+  c.background.low_level=1;c.background.high_level=2;
+  const w=mount(Component,{props:{template:c,analysisMode:'xps'},global:{stubs:{BatchResultChart:true}}});wrappers.push(w);
+  expect(w.get('[data-test="batch-background-window-hint"]').text()).toContain('逐谱背景需要两端窗口');
+  expect(c.background.low_level).toBe(1);
+  await w.setProps({template:{...c,background:{...c.background,low_window:[1,1],high_window:[3,3]}}});
+  expect(w.find('[data-test="batch-background-window-hint"]').exists()).toBe(false);
+});
+
+
+it('并存的不同分析工作区使用各自的背景和单位说明，不产生重复 ARIA ID',async()=>{
+  const Component=(await import('./components/BatchWorkbench.vue')).default;
+  const ids:string[]=[];
+  for(const mode of ['general','xrd'] as const){
+    const c=createMultiConfig([1,2,3,4],[1,3,2,1],null,mode);addMultiComponent(c);
+    c.baseline.kind='line';c.baseline.anchors=[{x:1,y:1},{x:3,y:2}];
+    const w=mount(Component,{props:{template:c,analysisMode:mode},global:{stubs:{BatchResultChart:true}}});wrappers.push(w);
+    for(const input of w.findAll('input[aria-describedby]')){
+      const id=input.attributes('aria-describedby')!;
+      expect(w.find(`[id="${id}"]`).exists()).toBe(true);
+      ids.push(id);
+    }
+  }
+  expect(ids.length).toBe(4);
+  expect(new Set(ids).size).toBe(ids.length);
 });

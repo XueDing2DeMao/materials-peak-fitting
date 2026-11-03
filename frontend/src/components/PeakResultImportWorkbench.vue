@@ -52,7 +52,7 @@ function download(kind:string){const a=workspace.value.analysis;if(!a)return;if(
 defineExpose({appendAnalysis,loadAnalysis,isBusy:()=>occupied.value});
 </script>
 <template>
- <main class="peak-analysis-workbench" aria-label="拟合结果解析与材料参数计算">
+ <section class="peak-analysis-workbench" aria-label="拟合结果解析与材料参数计算">
   <header class="peak-analysis-header"><div><span class="section-kicker">参数解析 · 材料计算</span><h2>从拟合结果到材料参数</h2><p class="hint">接收 CSV、文本和 Excel 峰表，或使用原谱工作区的拟合结果。不需要附带原谱。</p></div><div class="peak-inline-actions"><button :disabled="occupied" @click="archiveInput?.click()">恢复解析档案</button><button :disabled="occupied||!hasWork" @click="saveArchive">保存完整档案</button><input ref="archiveInput" type="file" accept=".json" hidden @change="restore" /></div></header>
   <nav class="peak-analysis-nav" aria-label="解析流程"><button v-for="(label,id) in {import:'1 导入与映射',records:'2 峰参数与异常',calculate:'3 材料参数',export:'4 导出与归档'}" :key="id" :class="{active:tab===id}" :aria-current="tab===id?'step':undefined" @click="tab=id">{{label}}</button></nav>
   <p v-if="error" role="alert" class="error">{{error}}</p><p v-if="message" role="status" class="peak-status">{{message}}</p>
@@ -67,5 +67,5 @@ defineExpose({appendAnalysis,loadAnalysis,isBusy:()=>occupied.value});
   <section v-show="tab==='records'" class="panel"><PeakRecordTable v-if="workspace.analysis" :analysis="workspace.analysis" @revised="revised" /><p v-else class="peak-empty">先导入峰参数，或从原谱拟合结果进入。</p><details v-if="workspace.analysis?.issues.length" open class="peak-detail"><summary>解析异常与待复核项（{{workspace.analysis.issues.length}}）</summary><ul><li v-for="(i,n) in workspace.analysis.issues" :key="n">{{i.severity==='error'?'错误':'提示'}} · {{i.message}} <small>{{i.source_file??''}} {{i.source_sheet??''}} {{i.code}} {{i.row?`第 ${i.row} 行`:''}} {{i.column??''}}</small></li></ul></details><button v-if="workspace.analysis?.records.length" class="primary" @click="tab='calculate'">选择公式与材料参数</button></section>
   <section v-show="tab==='calculate'" class="panel"><DerivedCalculationPanel v-model="workspace.formulaDraft" :records="workspace.analysis?.records??[]" :history="workspace.calculations" @change="changed('公式、输入或计算范围已修改')" @calculated="calculated" @activity="calculating=$event" /></section>
   <section v-show="tab==='export'" class="panel"><h3>导出与归档</h3><p class="hint">导出已有快照，不重新计算。完整档案包含峰参数、原值来源、映射模板、公式、输入和历史；原始文件仍请另行保存。</p><label>分析备注<textarea v-model="workspace.note" rows="3" /></label><div class="peak-export-grid"><button :disabled="!workspace.analysis" @click="download('peaks')">标准峰参数 CSV</button><button :disabled="!workspace.calculations.length" @click="download('calculations')">二次计算结果 CSV</button><button :disabled="!workspace.analysis" @click="download('issues')">异常记录 CSV</button><button :disabled="!workspace.analysis" @click="download('report')">可打印 HTML 摘要</button><button class="primary" :disabled="!hasWork||occupied" @click="saveArchive">保存完整解析档案 JSON</button></div><p class="hint">恢复档案不自动重算。修改映射、参数或公式后，既有结果标为失效并保留历史。未保存的工作在关闭网页后不会保留。</p></section>
- </main>
+ </section>
 </template>

@@ -3,8 +3,9 @@ import hashlib
 import numpy as np
 from scipy.optimize import least_squares
 from scipy.special import erf
+from scipy.stats import t as student_t
 from .peaks import evaluate_peak
-from .peak_properties import peak_geometry
+from .peak_properties import add_height_uncertainty, peak_geometry
 from .parameter_graph import ParameterGraph
 
 
@@ -94,6 +95,8 @@ def fit_components(request, preview, *, extra_warnings=(), uncertainty_note="标
     if weak_tail_roots:
         warnings.append('EMG 接近 Gaussian 极限（弱尾）；相关宽度和尾尺度不报告线性标准误')
     window_areas = []
+    # 条件于当前背景和模型；关联参数的线性关系由 a 传播到标准误。
+    ci_factor = float(student_t.ppf(.975, n-k))
     for c, curve in zip(components, ys):
         params = {}
         for name in c.parameters:
@@ -104,12 +107,24 @@ def fit_components(request, preview, *, extra_warnings=(), uncertainty_note="标
                       "秩不足" if cov is None else "贴边参数" if idx in active else
                       "弱尾接近 Gaussian 极限" if root in weak_tail_roots else None)
             lo, hi = graph.bounds[key]
-            params[name] = {"value": values[key], "standard_error": None if reason else float(abs(a)*np.sqrt(max(cov[idx,idx],0))),
+            se = None if reason else float(abs(a)*np.sqrt(max(cov[idx,idx],0)))
+            ci = None if se is None else [values[key]-ci_factor*se, values[key]+ci_factor*se]
+            params[name] = {"value": values[key], "standard_error": se, "confidence_interval": ci,
                             "uncertainty_reason": reason, "fixed": idx is None, "bound": idx in active,
                             "linked_to": ".".join(root) if key in graph.links else None,
                             "lower": float(lo) if np.isfinite(lo) else None, "upper": float(hi) if np.isfinite(hi) else None}
         parameter_values = {p:values[c.id,p] for p in c.parameters}
         geometry = peak_geometry(c.model,parameter_values,float(x[0]),float(x[-1]))
+        height_terms = {}
+        height_reason = '存在贴边参数，峰高线性标准误不可用' if active else None
+        for name in ('A','w'):
+            if name not in params:
+                continue
+            root, coefficient, _ = graph.expanded[c.id,name]
+            if root in free_index:
+                height_terms[name] = (free_index[root], coefficient)
+                height_reason = params[name]['uncertainty_reason'] or height_reason
+        add_height_uncertainty(geometry,c.model,parameter_values,height_terms,cov,ci_factor,height_reason)
         a, xc = values[c.id,'A'], values[c.id,'xc']
         w = geometry['fwhm']
         if c.model in ('gaussian','lorentz','psd_voigt1'):

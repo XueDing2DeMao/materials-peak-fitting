@@ -3,9 +3,12 @@ import numpy as np
 from scipy.integrate import cumulative_trapezoid
 
 from .xps_schemas import XpsRequest
+from .spectrum_units import validate_axis_unit
 
 
 def prepare_data(request: XpsRequest):
+    if request.source:
+        validate_axis_unit('xps', request.source.x_column)
     raw = np.asarray(request.x, dtype=float)
     y = np.asarray(request.y, dtype=float)
     order = np.argsort(raw)

@@ -1,0 +1,70 @@
+/* 工作区公共外壳：会话、数据身份与图表工具遵循同一层级。 */
+.analysis-workbench {
+  max-width: none;
+}
+.analysis-workbench > .workbench-header {
+  min-height: 56px;
+  padding-block: 8px;
+  background: #192f49;
+  border-bottom: 0;
+  gap: 24px;
+}
+.workbench-header .product-identity { gap: 8px; }
+.workbench-header h1 { color: #fff; font-size: 19px; white-space: nowrap; }
+.workbench-header .product-mark { width: 30px; height: 30px; background: transparent; color: #78b7ff; }
+.workbench-header .product-subtitle { display: none; }
+.workbench-header .workspace-context { flex-wrap: nowrap; gap: 12px; }
+.workbench-header .header-status { gap: 10px; flex-wrap: wrap; }
+.workbench-header .mode-select select { width: 128px; height: 32px; font-size: 13px; font-weight: 500; }
+.workbench-header .workspace-input select { width: 136px; }
+.workbench-header .processing-buttons { padding: 0; gap: 0; background: #fff; }
+.workbench-header .processing-buttons button { font-size: 13px; padding-inline: 12px; }
+.workbench-header .processing-buttons button[aria-pressed=true] { background: #dceaff; }
+.workbench-header [data-test=derive-current-results] {
+  margin-left: auto;
+  border-color: #8196ad;
+  background: transparent;
+  color: #fff;
+  height: 32px;
+  font-size: 12px;
+}
+.workbench-header [data-test=derive-current-results]:hover:not(:disabled) { background: #2a4665; }
+.session-control { position: relative; display: flex; align-items: center; gap: 8px; flex: none; }
+.session-control .session-quick-save { height: 32px; font-size: 13px; }
+.workspace-context .session-control .session-actions > summary { color: #e1eaf4; padding: 6px; white-space: nowrap; }
+.workspace-context .session-control .session-actions[open] {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 80;
+  width: min(760px,calc(100vw - 40px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  background: #fff;
+  color: var(--ui-text);
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px #172b4630;
+}
+.workspace-context .session-control .session-actions[open] > summary { color: var(--ui-primary); }
+.analysis-workbench > .workflow-description { margin-block: 6px; }
+.dataset-summary:has(.dataset-summary-row) { border-radius: 6px; background: #f7f9fc; }
+.dataset-summary .dataset-summary-row { flex: 1 1 430px; gap: 12px; }
+.dataset-summary .dataset-file { flex: 1; min-width: 0; }
+.dataset-summary .dataset-file > div { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; column-gap: 12px; }
+.dataset-summary .dataset-file strong { grid-column: 1 / -1; }
+.dataset-summary .dataset-file small { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.dataset-summary .dataset-audit-link { margin: 0; white-space: nowrap; }
+.dataset-summary .dataset-columns { flex: 0 1 auto; max-width: 48%; font-size: 12px; }
+.dataset-summary .dataset-columns > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media(max-width:1150px) {
+  .workbench-header .workspace-context { flex-wrap: wrap; }
+  .workbench-header .session-control { margin-left: auto; }
+}
+@media(max-width:760px) {
+  .analysis-workbench > .workbench-header { gap: 8px; }
+  .workbench-header .header-status { gap: 6px; }
+  .workbench-header .mode-select select { width: 100%; min-width: 116px; }
+  .dataset-summary .dataset-columns { max-width: 100%; }
+}

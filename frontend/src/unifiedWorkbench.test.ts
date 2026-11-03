@@ -19,6 +19,17 @@ const wrappers:Array<{unmount:()=>void}>=[];
 afterEach(()=>{wrappers.splice(0).forEach(w=>w.unmount());vi.clearAllMocks();vi.restoreAllMocks();});
 async function workbench(){const w=mount(MultiPeakWorkbench,{props:{x,y,source:null,mode:'general',unified:true}});wrappers.push(w);await w.get('[data-test="multi-baseline"]').setValue('none');await w.get('[data-test="multi-add"]').trigger('click');return w;}
 describe('统一峰拟合工作区',()=>{
+  it('单峰导出传递本次拟合选定的列单位和 XRD 角度',async()=>{
+    const source={filename:'sample.csv',file_sha256:'abc',sheet:'data',x_column:'2theta',y_column:'Intensity [counts]'};
+    const w=mount(MultiPeakWorkbench,{props:{x,y,source,mode:'xrd',unified:true}});wrappers.push(w);
+    await w.get('[data-test="multi-baseline"]').setValue('none');
+    await w.get('[data-test="multi-add"]').trigger('click');
+    vi.mocked(singleApi.runFit).mockResolvedValue(fitted);
+    await w.get('[data-test="multi-fit"]').trigger('click');await flushPromises();
+    vi.mocked(singleApi.downloadExport).mockRejectedValueOnce(new Error('下载测试'));
+    w.getComponent(ResultsPanel).vm.$emit('export','parameters');await flushPromises();
+    expect(singleApi.downloadExport).toHaveBeenCalledWith('parameters',fitted,{x:'°',y:'counts'});
+  });
   it('参数页签仅改变可见模块，保留输入、基线复核、结果与求解次数',async()=>{
     const w=await workbench();vi.mocked(singleApi.runFit).mockResolvedValue(fitted);
     await w.get('[data-test="multi-fit"]').trigger('click');await flushPromises();
